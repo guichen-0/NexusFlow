@@ -1,59 +1,49 @@
-# NexusFlow - AI 多模型协作任务引擎
-
 <p align="center">
   <img src="https://img.shields.io/badge/Version-1.0.0-6366f1?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square" alt="Python">
-  <img src="https://img.shields.io/badge/React-18-61DAFB?style=flat-square" alt="React">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square" alt="React">
   <img src="https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square" alt="FastAPI">
+  <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
 </p>
+
+<h1 align="center">NexusFlow</h1>
+
+<p align="center">
+  <strong>AI Multi-Model Collaborative Task Engine</strong><br>
+  AI 多模型协作任务引擎
+</p>
+
+<p align="center">
+  <a href="#-核心特性">核心特性</a> ·
+  <a href="#-快速开始">快速开始</a> ·
+  <a href="#-内置工作流">工作流模板</a> ·
+  <a href="#-技术架构">技术架构</a> ·
+  <a href="#-api-文档">API 文档</a>
+</p>
+
+---
 
 ## 项目简介
 
 NexusFlow 是一个**AI 多模型协作任务引擎**，支持通过自然语言描述自动拆解任务为 DAG 工作流，调度多个 AI Agent 协作完成复杂任务。
 
-### 核心特性
+只需输入一行需求描述，NexusFlow 就能自动：
+1. 解析需求并生成可执行的 DAG 工作流
+2. 分配专业 Agent（需求分析、代码生成、审查、修复、报告）
+3. 并行执行节点、实时追踪进度
+4. 统计 Token 消耗、生成可视化分析报告
 
-- 🧠 **智能任务解析**：自然语言输入 → AI 自动拆解为 DAG 工作流
-- 🤖 **多 Agent 协作**：内置 5 种专业 Agent（需求分析、代码生成、代码审查、自动修复、报告生成）
-- ⚡ **并行执行引擎**：基于拓扑排序的 DAG 执行引擎，支持节点并行执行
-- 📊 **Token 消耗统计**：实时统计 AI 调用消耗，支持可视化分析
-- 🎨 **精美 UI 界面**：暗色玻璃拟态主题，流畅动画效果
+## ✨ 核心特性
 
-## 8 个内置工作流模板
+- **智能任务解析** — 自然语言输入，AI 自动拆解为 DAG 工作流
+- **多 Agent 协作** — 内置 5 种专业 Agent：需求分析 / 代码生成 / 代码审查 / 自动修复 / 报告生成
+- **并行执行引擎** — 基于拓扑排序的 DAG 引擎，支持节点级并行
+- **Token 消耗统计** — 实时追踪 AI 调用成本，可视化分析面板
+- **8 个内置模板** — 覆盖代码工厂、内容创作、数据处理、测试生成等场景
+- **玻璃拟态 UI** — 暗色主题 + Indigo-Purple 渐变 + 玻璃拟态效果
+- **Mock 模式** — 零配置启动，所有 API 返回模拟数据，适合演示和开发
 
-| # | 模板名称 | 场景 | 节点数 |
-|---|----------|------|--------|
-| 1 | 自动代码工厂 | 开发者工具 | 5 |
-| 2 | 内容创作流水线 | 内容创作 | 5 |
-| 3 | 批量任务处理器 | 数据处理 | 4 |
-| 4 | AI 训练数据生成 | 数据集构建 | 6 |
-| 5 | 多语言文档翻译管线 | 国际化 | 4 |
-| 6 | 代码 Review 自动化 | 代码审查 | 5 |
-| 7 | AI 驱动的测试用例生成 | 测试自动化 | 5 |
-| 8 | 智能客服对话流设计 | 对话系统 | 6 |
-
-## 技术架构
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                      前端 (React + TypeScript)          │
-│   ┌─────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│   │  工作台     │  │  工作流编辑器 │  │  数据分析    │ │
-│   └─────────────┘  └──────────────┘  └──────────────┘ │
-└────────────────────────┬────────────────────────────────┘
-                         │ REST API
-┌────────────────────────┴────────────────────────────────┐
-│                      后端 (Python + FastAPI)             │
-│  ┌────────────┐ ┌────────────┐ ┌────────────────────┐ │
-│  │ 任务解析器  │ │ 工作流引擎  │ │     模型路由器      │ │
-│  └────────────┘ └────────────┘ └────────────────────┘ │
-│  ┌────────────┐ ┌────────────┐ ┌────────────────────┐ │
-│  │ Agent 编排 │ │  AI 服务   │ │     存储服务        │ │
-│  └────────────┘ └────────────┘ └────────────────────┘ │
-└────────────────────────────────────────────────────────┘
-```
-
-## 快速开始
+## 🚀 快速开始
 
 ### 环境要求
 
@@ -64,8 +54,8 @@ NexusFlow 是一个**AI 多模型协作任务引擎**，支持通过自然语言
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/yourusername/nexusflow.git
-cd nexusflow
+git clone https://github.com/lzw-DDS/NexusFlow.git
+cd NexusFlow
 ```
 
 ### 2. 启动后端
@@ -76,12 +66,11 @@ cd backend
 # 安装依赖
 pip install -r requirements.txt
 
-# 启动服务
+# 启动服务（默认 Mock 模式，无需 API Key）
 python run.py
 ```
 
-后端将运行在 `http://localhost:8000`
-API 文档：`http://localhost:8000/docs`
+后端运行在 `http://localhost:8000` · API 文档：`http://localhost:8000/docs`
 
 ### 3. 启动前端
 
@@ -95,155 +84,133 @@ npm install
 npm run dev
 ```
 
-前端将运行在 `http://localhost:5173`
+前端运行在 `http://localhost:5173`
 
-### 4. 访问应用
+### 4. 开始使用
 
-打开浏览器访问 `http://localhost:5173`
+打开浏览器访问 `http://localhost:5173`，在首页输入你的需求即可开始。
 
-## 使用说明
+## 📦 内置工作流
 
-### 创建任务
+| # | 模板名称 | 场景 | 节点数 |
+|---|----------|------|--------|
+| 1 | 自动代码工厂 | 开发者工具 | 5 |
+| 2 | 内容创作流水线 | 内容创作 | 5 |
+| 3 | 批量任务处理器 | 数据处理 | 4 |
+| 4 | AI 训练数据生成 | 数据集构建 | 6 |
+| 5 | 多语言文档翻译管线 | 国际化 | 4 |
+| 6 | 代码 Review 自动化 | 代码审查 | 5 |
+| 7 | AI 驱动的测试用例生成 | 测试自动化 | 5 |
+| 8 | 智能客服对话流设计 | 对话系统 | 6 |
 
-1. 在首页输入框中输入你的需求
-2. 例如：`帮我写一个用户登录注册功能，用 Python Flask`
-3. 点击「执行」按钮
-
-### 选择工作流模板
-
-1. 访问「工作流」页面
-2. 选择一个预设模板
-3. 点击「使用此模板」
-
-### 查看数据分析
-
-1. 访问「数据分析」页面
-2. 查看 Token 消耗统计
-3. 查看执行历史记录
-
-## 项目截图
-
-> 请在此处添加你的项目截图
-
-### 工作台
-![工作台](./screenshots/home.png)
-
-### 工作流模板
-![工作流模板](./screenshots/workflows.png)
-
-### 任务执行
-![任务执行](./screenshots/task.png)
-
-### 数据分析
-![数据分析](./screenshots/analytics.png)
-
-## API 文档
-
-### 工作流 API
+## 🏗 技术架构
 
 ```
-GET  /api/v1/workflows          # 获取所有工作流
-GET  /api/v1/workflows/{id}      # 获取工作流详情
-POST /api/v1/workflows           # 创建工作流
+┌─────────────────────────────────────────────────────────┐
+│                    前端 (React + TypeScript)              │
+│  ┌──────────┐  ┌───────────────┐  ┌─────────────────┐  │
+│  │  工作台   │  │  工作流编辑器   │  │   数据分析面板    │  │
+│  └──────────┘  └───────────────┘  └─────────────────┘  │
+│  ┌──────────┐  ┌───────────────┐  ┌─────────────────┐  │
+│  │  任务列表  │  │  Agent 详情页  │  │    设置页面      │  │
+│  └──────────┘  └───────────────┘  └─────────────────┘  │
+└────────────────────────┬────────────────────────────────┘
+                         │ REST API (FastAPI)
+┌────────────────────────┴────────────────────────────────┐
+│                    后端 (Python + FastAPI)                │
+│  ┌────────────┐ ┌────────────┐ ┌────────────────────┐   │
+│  │ 任务解析器  │ │ 工作流引擎  │ │    模型路由器       │   │
+│  └────────────┘ └────────────┘ └────────────────────┘   │
+│  ┌────────────┐ ┌────────────┐ ┌────────────────────┐   │
+│  │ Agent 编排  │ │  AI 服务   │ │    存储服务         │   │
+│  └────────────┘ └────────────┘ └────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### 任务 API
+## 📡 API 文档
 
-```
-GET  /api/v1/tasks               # 获取所有任务
-POST /api/v1/tasks               # 创建任务
-GET  /api/v1/tasks/{id}          # 获取任务详情
-POST /api/v1/tasks/{id}/execute  # 执行任务
-```
+启动后端后访问 `http://localhost:8000/docs` 查看完整 Swagger 文档。
 
-### 分析 API
+### 主要端点
 
-```
-GET /api/v1/analytics/summary          # 获取统计摘要
-GET /api/v1/analytics/token-usage       # 获取 Token 消耗
-GET /api/v1/analytics/execution-history # 获取执行历史
-```
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/v1/workflows` | 获取所有工作流模板 |
+| `GET` | `/api/v1/workflows/{id}` | 获取工作流详情 |
+| `POST` | `/api/v1/workflows` | 创建自定义工作流 |
+| `GET` | `/api/v1/tasks` | 获取所有任务 |
+| `POST` | `/api/v1/tasks` | 创建新任务 |
+| `GET` | `/api/v1/tasks/{id}` | 获取任务详情 |
+| `POST` | `/api/v1/tasks/{id}/execute` | 执行任务 |
+| `GET` | `/api/v1/agents` | 获取 Agent 列表 |
+| `GET` | `/api/v1/agents/{id}/thinking` | 查看 Agent 思维过程 |
+| `GET` | `/api/v1/analytics/summary` | 统计摘要 |
+| `GET` | `/api/v1/analytics/token-usage` | Token 消耗数据 |
+| `GET` | `/api/v1/analytics/execution-history` | 执行历史 |
 
-## 配置说明
-
-### 环境变量
+## ⚙️ 配置说明
 
 复制 `.env.example` 为 `.env` 并配置：
 
 ```env
-# AI 服务配置
-USE_MOCK_MODE=true              # 设置为 false 启用真实 API
-AI_API_KEY=your-api-key          # 你的 API Key
+# Mock 模式（默认开启，无需 API Key）
+USE_MOCK_MODE=true
+
+# 切换到真实 API 时配置
+AI_API_KEY=your-api-key
 AI_BASE_URL=https://api.openai.com/v1
 
-# 服务器配置
+# 服务器
 HOST=0.0.0.0
 PORT=8000
 ```
 
-### Mock 模式
-
-默认启用 Mock 模式，所有 AI 调用返回模拟数据。适合：
-- 演示项目功能
-- 快速开发调试
-- 无 API Key 时体验完整功能
-
-## 技术栈
+## 🛠 技术栈
 
 ### 后端
-
-- **FastAPI** - 高性能 Web 框架
-- **Pydantic** - 数据验证
-- **SQLite** - 轻量级数据库
-- **OpenAI SDK** - AI 服务集成
+- **FastAPI** — 高性能异步 Web 框架
+- **Pydantic** — 数据验证与序列化
+- **SQLite** — 轻量级持久化存储
+- **OpenAI SDK** — AI 服务集成
 
 ### 前端
+- **React 19** — UI 框架
+- **TypeScript** — 类型安全
+- **Vite** — 极速构建工具
+- **Tailwind CSS** — 原子化样式
+- **React Flow** — 工作流 DAG 可视化
+- **Recharts** — 数据图表
+- **Zustand** — 轻量状态管理
+- **Lucide React** — 图标库
 
-- **React 18** - UI 框架
-- **TypeScript** - 类型安全
-- **Vite** - 构建工具
-- **Tailwind CSS** - 样式框架
-- **shadcn/ui** - UI 组件库
-- **React Flow** - 工作流可视化
-- **Recharts** - 数据图表
-- **Zustand** - 状态管理
-
-## 开发说明
-
-### 项目结构
+## 📁 项目结构
 
 ```
 nexusflow/
 ├── backend/
 │   ├── app/
-│   │   ├── api/          # API 路由
-│   │   ├── core/         # 核心逻辑
-│   │   ├── models/      # 数据模型
-│   │   └── services/     # 服务层
-│   ├── workflows/        # 工作流定义
-│   └── run.py           # 启动脚本
+│   │   ├── api/          # API 路由 (tasks, workflows, agents, analytics)
+│   │   ├── core/         # 核心引擎 (task_parser, workflow_engine, model_router)
+│   │   ├── models/       # Pydantic 数据模型
+│   │   ├── services/     # 服务层 (ai_service, storage_service)
+│   │   └── main.py       # FastAPI 入口
+│   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── components/   # React 组件
-│   │   ├── pages/       # 页面
-│   │   ├── stores/      # 状态管理
-│   │   ├── services/    # API 服务
-│   │   └── types/       # TypeScript 类型
-│   └── ...
+│   │   ├── components/   # 通用组件 (layout, ui)
+│   │   ├── pages/        # 页面 (Home, Workflows, Tasks, Analytics, Settings)
+│   │   ├── stores/       # Zustand 状态管理
+│   │   ├── services/     # API & Mock 数据服务
+│   │   ├── types/        # TypeScript 类型定义
+│   │   └── lib/          # 工具函数 & 常量
+│   └── package.json
 └── README.md
 ```
 
-### 添加新工作流
-
-1. 在 `backend/workflows/` 目录创建新文件
-2. 定义工作流的节点结构
-3. 在 `workflows.py` 中注册新工作流
-
-## License
+## 📄 License
 
 MIT License
 
-## 联系方式
+## 👤 Author
 
-- GitHub: [@yourusername](https://github.com/yourusername)
-- Email: your.email@example.com
+- GitHub: [lzw-DDS](https://github.com/lzw-DDS)
