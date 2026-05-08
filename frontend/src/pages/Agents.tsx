@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { Bot, Clock, Cpu, Zap, CheckCircle2, Activity, BrainCircuit } from 'lucide-react'
 import { mockAgentProcess } from '../services/mock'
 import { formatNumber } from '../lib/utils'
@@ -125,10 +124,10 @@ export default function Agents() {
                 transition-all duration-300
                 ${getStatusConfig(agent.status).ringClass}
               `}>
-                {(agentIcons[index] || Bot)({
-                  className: `w-5 h-5 ${getStatusConfig(agent.status).iconClass}`,
-                  style: { color: getStatusConfig(agent.status).color }
-                })}
+                {(() => {
+                  const Icon = agentIcons[index] || Bot
+                  return <Icon className={`w-5 h-5 ${getStatusConfig(agent.status).iconClass}`} style={{ color: getStatusConfig(agent.status).color }} />
+                })()}
                 <span
                   className="text-[9px] font-medium mt-0.5"
                   style={{ color: getStatusConfig(agent.status).color }}
