@@ -8,7 +8,8 @@ import {
   BarChart3,
   Settings,
   Sparkles,
-  Zap
+  Zap,
+  Terminal
 } from 'lucide-react'
 import { useSettingsStore } from '../../stores/settingsStore'
 
@@ -16,6 +17,7 @@ const navItems = [
   { to: '/', icon: LayoutDashboard, label: '工作台' },
   { to: '/chat', icon: MessageSquare, label: '聊天' },
   { to: '/skills', icon: Zap, label: 'Skills' },
+  { to: '/sandbox', icon: Terminal, label: '沙箱' },
   { to: '/workflows', icon: Workflow, label: '工作流' },
   { to: '/tasks', icon: ListTodo, label: '任务' },
   { to: '/agents', icon: Users, label: 'Agent 团队' },

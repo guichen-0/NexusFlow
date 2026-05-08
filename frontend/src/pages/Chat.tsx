@@ -1,8 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react'
+import { Terminal } from 'lucide-react'
 import { useChatStore, type ChatMessage } from '../stores'
 import ChatMessageComponent from '../components/chat/ChatMessage'
 import ChatInput from '../components/chat/ChatInput'
 import ChatSidebar from '../components/chat/ChatSidebar'
+import SandboxPanel from '../components/chat/SandboxPanel'
+import { useSandboxStore } from '../stores/sandboxStore'
 
 export default function Chat() {
   const {
@@ -15,6 +18,8 @@ export default function Chat() {
     deleteSession,
     sendMessage,
   } = useChatStore()
+
+  const { panelOpen, togglePanel } = useSandboxStore()
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -53,10 +58,9 @@ export default function Chat() {
         onDelete={handleDeleteSession}
       />
 
-      {/* 右侧消息区域 */}
+      {/* 中间消息区域 */}
       <div className="flex-1 flex flex-col h-full min-w-0">
         {!activeSessionId ? (
-          /* 空状态：未选择会话 */
           <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
             <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
               <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -78,6 +82,28 @@ export default function Chat() {
           </div>
         ) : (
           <>
+            {/* 工具栏 */}
+            <div className="flex items-center justify-between px-4 py-1.5 border-b border-border-secondary">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-text-muted">
+                  {messages.length} 条消息
+                </span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={togglePanel}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs transition-colors ${
+                    panelOpen
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-text-tertiary hover:text-text-secondary hover:bg-surface-2'
+                  }`}
+                >
+                  <Terminal className="w-3.5 h-3.5" />
+                  沙箱
+                </button>
+              </div>
+            </div>
+
             {/* 消息列表 */}
             <div className="flex-1 overflow-y-auto">
               {messages.length === 0 && (
@@ -94,7 +120,6 @@ export default function Chat() {
                 />
               ))}
 
-              {/* 流式输出中的临时消息 */}
               {isLoading && streamingContent && (
                 <ChatMessageComponent
                   role="assistant"
@@ -103,7 +128,6 @@ export default function Chat() {
                 />
               )}
 
-              {/* 加载中但还没收到内容 */}
               {isLoading && !streamingContent && (
                 <div className="flex gap-3 px-4 py-3">
                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -118,11 +142,13 @@ export default function Chat() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* 输入框 */}
             <ChatInput onSend={handleSend} isLoading={isLoading} />
           </>
         )}
       </div>
+
+      {/* 右侧沙箱面板 */}
+      <SandboxPanel />
     </div>
   )
 }

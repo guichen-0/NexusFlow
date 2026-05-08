@@ -65,6 +65,7 @@ class SandboxExecutor:
         workspace_path: Optional[str] = None,
         timeout: Optional[int] = None,
         stdin_data: Optional[str] = None,
+        permissions: Optional[object] = None,
     ) -> ExecutionResult:
         """
         执行代码
@@ -82,6 +83,20 @@ class SandboxExecutor:
                 stderr=f"不支持的语言: {language}。支持: {', '.join(self.SUPPORTED_LANGUAGES)}"
             )
 
+        # 权限检查
+        if permissions is not None:
+            # 语言限制
+            allowed_langs = getattr(permissions, "allowed_languages", None)
+            if allowed_langs and language not in allowed_langs:
+                return ExecutionResult(
+                    exit_code=1,
+                    stderr=f"当前权限不允许使用 {language}。允许: {', '.join(allowed_langs)}"
+                )
+            # 权限超时覆盖
+            perm_timeout = getattr(permissions, "max_timeout", None)
+            if perm_timeout and (timeout is None or timeout > perm_timeout):
+                timeout = perm_timeout
+
         # 创建或使用已有工作空间
         own_workspace = workspace_path is None
         if own_workspace:
@@ -91,9 +106,9 @@ class SandboxExecutor:
 
         try:
             if language == "python":
-                result = await self._execute_python(code, workspace_path, timeout, stdin_data)
+                result = await self._execute_python(code, workspace_path, timeout, stdin_data, permissions)
             elif language in ("javascript", "typescript"):
-                result = await self._execute_js(code, workspace_path, timeout, stdin_data)
+                result = await self._execute_js(code, workspace_path, timeout, stdin_data, permissions)
             else:
                 result = ExecutionResult(exit_code=1, stderr=f"未知语言: {language}")
 
@@ -106,13 +121,19 @@ class SandboxExecutor:
                 self.cleanup_workspace(workspace_path)
 
     async def _execute_python(
-        self, code: str, workspace: str, timeout: int, stdin_data: Optional[str]
+        self, code: str, workspace: str, timeout: int, stdin_data: Optional[str],
+        permissions: Optional[object] = None,
     ) -> ExecutionResult:
         """执行 Python 代码"""
         script_path = os.path.join(workspace, "main.py")
 
         with open(script_path, "w", encoding="utf-8") as f:
             f.write(code)
+
+        # 根据权限生成环境变量
+        exec_env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
+        if permissions is not None and hasattr(permissions, "get_effective_env"):
+            exec_env = permissions.get_effective_env()
 
         start = datetime.now()
 
@@ -125,7 +146,7 @@ class SandboxExecutor:
                 stderr=asyncio.subprocess.PIPE,
                 stdin=asyncio.subprocess.PIPE if stdin_data else asyncio.subprocess.DEVNULL,
                 cwd=workspace,
-                env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+                env=exec_env,
             )
 
             try:
@@ -167,7 +188,8 @@ class SandboxExecutor:
             )
 
     async def _execute_js(
-        self, code: str, workspace: str, timeout: int, stdin_data: Optional[str]
+        self, code: str, workspace: str, timeout: int, stdin_data: Optional[str],
+        permissions: Optional[object] = None,
     ) -> ExecutionResult:
         """执行 JavaScript 代码"""
         script_path = os.path.join(workspace, "main.js")

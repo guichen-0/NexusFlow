@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { MessageCircle, User, CheckCircle, XCircle, Clock, Copy, Check } from 'lucide-react'
+import { MessageCircle, User, CheckCircle, XCircle, Clock, Copy, Check, Play } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { useSandboxStore } from '../../stores/sandboxStore'
 
 interface CodeExecution {
   language: string
@@ -69,6 +70,72 @@ function ExecutionResult({ exec }: { exec: CodeExecution }) {
   )
 }
 
+function CodeBlockWithRun({ children, className, codeText }: { children: React.ReactNode; className?: string; codeText: string }) {
+  const [copied, setCopied] = useState(false)
+  const { executeCode, togglePanel, setPanelOpen, activeWorkspaceId, createWorkspace, isExecuting } = useSandboxStore()
+
+  const langMatch = className?.match(/language-(\w+)/)
+  const lang = langMatch ? langMatch[1] : 'text'
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(codeText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleRunInSandbox = async () => {
+    const mappedLang = lang === 'py' ? 'python' : lang === 'js' ? 'javascript' : lang === 'ts' ? 'javascript' : lang
+    if (!['python', 'javascript', 'typescript'].includes(mappedLang)) {
+      alert(`暂不支持在沙箱中运行 ${lang}`)
+      return
+    }
+    // 如果没有工作空间，自动创建
+    if (!activeWorkspaceId) {
+      await createWorkspace()
+    }
+    // 确保面板打开
+    setPanelOpen(true)
+    try {
+      await executeCode(codeText, mappedLang)
+    } catch (e: any) {
+      alert(e.message)
+    }
+  }
+
+  const isRunnable = ['python', 'py', 'javascript', 'js', 'typescript', 'ts'].includes(lang)
+
+  return (
+    <div className="relative group rounded-lg overflow-hidden">
+      {/* 代码块工具栏 */}
+      <div className="absolute top-0 right-0 flex items-center gap-0.5 px-2 py-1 bg-surface-tertiary/90 rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity z-10">
+        {lang && (
+          <span className="text-xs text-text-tertiary mr-2">{lang}</span>
+        )}
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs text-text-tertiary hover:text-text-secondary hover:bg-surface-2 transition-colors"
+          title="复制"
+        >
+          {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+        </button>
+        {isRunnable && (
+          <button
+            onClick={handleRunInSandbox}
+            disabled={isExecuting}
+            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+            title="在沙箱中运行"
+          >
+            <Play className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+      <pre className="bg-background rounded-lg p-3 overflow-x-auto pt-7">
+        <code className="text-xs">{children}</code>
+      </pre>
+    </div>
+  )
+}
+
 export default function ChatMessage({ role, content, isStreaming, executions }: ChatMessageProps) {
   const isUser = role === 'user'
 
@@ -94,7 +161,13 @@ export default function ChatMessage({ role, content, isStreaming, executions }: 
             <div className="prose prose-sm prose-invert max-w-none">
               <ReactMarkdown
                 components={{
-                  pre: ({ children }) => <pre className="bg-background rounded-lg p-3 overflow-x-auto">{children}</pre>,
+                  pre: ({ children }) => {
+                    // 提取代码文本
+                    const codeEl = (children as any)?.props?.children
+                    const codeText = typeof codeEl === 'string' ? codeEl : ''
+                    const className = (children as any)?.props?.className
+                    return <CodeBlockWithRun className={className} codeText={codeText}>{children}</CodeBlockWithRun>
+                  },
                   code: ({ children, className }) => {
                     const isInline = !className
                     if (isInline) {
@@ -113,7 +186,6 @@ export default function ChatMessage({ role, content, isStreaming, executions }: 
           )}
         </div>
 
-        {/* 代码执行结果 */}
         {!isUser && executions && executions.length > 0 && !isStreaming && (
           <div className="space-y-1.5 mt-1.5">
             {executions.map((exec, idx) => (
