@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   Workflow,
   ListTodo,
+  Users,
   BarChart3,
   Settings,
   Sparkles
@@ -13,6 +14,7 @@ const navItems = [
   { to: '/', icon: LayoutDashboard, label: '工作台' },
   { to: '/workflows', icon: Workflow, label: '工作流' },
   { to: '/tasks', icon: ListTodo, label: '任务' },
+  { to: '/agents', icon: Users, label: 'Agent 团队' },
   { to: '/analytics', icon: BarChart3, label: '数据分析' },
   { to: '/settings', icon: Settings, label: '设置' }
 ]
@@ -39,6 +41,7 @@ export function Sidebar() {
             <li key={to}>
               <NavLink
                 to={to}
+                end={to === '/'}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group ${
                     isActive

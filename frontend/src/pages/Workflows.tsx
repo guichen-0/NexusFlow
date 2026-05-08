@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { Workflow, Code2, FileText, Database, Bot, Layers, ArrowRight } from 'lucide-react'
 import { useWorkflowStore } from '../stores/workflowStore'
 import { WORKFLOW_CATEGORIES } from '../lib/constants'
@@ -77,8 +78,9 @@ export default function Workflows() {
 
 function WorkflowCard({ workflow, index }: { workflow: any; index: number }) {
   return (
-    <div
-      className="group glass rounded-xl p-5 hover:border-primary/30 transition-all duration-300 cursor-pointer animate-in"
+    <Link
+      to={`/workflows/${workflow.id}`}
+      className="group glass rounded-xl p-5 hover:border-primary/30 transition-all duration-300 cursor-pointer animate-in block"
       style={{ animationDelay: `${index * 50}ms` }}
     >
       {/* Header */}
@@ -135,10 +137,10 @@ function WorkflowCard({ workflow, index }: { workflow: any; index: number }) {
       </div>
 
       {/* Action */}
-      <button className="w-full py-2 bg-surface-2 hover:bg-primary/10 border border-border hover:border-primary/30 rounded-lg text-sm text-text-secondary hover:text-primary transition-all flex items-center justify-center gap-2">
-        使用此模板
+      <span className="w-full py-2 bg-surface-2 group-hover:bg-primary/10 border border-border group-hover:border-primary/30 rounded-lg text-sm text-text-secondary group-hover:text-primary transition-all flex items-center justify-center gap-2">
+        打开编辑器
         <ArrowRight className="w-4 h-4" />
-      </button>
-    </div>
+      </span>
+    </Link>
   )
 }
