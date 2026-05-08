@@ -2,14 +2,18 @@ import { useEffect, useState } from 'react'
 import { Play, Clock, CheckCircle, Zap, TrendingUp, Bot, ArrowRight, Sparkles, Activity, Cpu, DollarSign } from 'lucide-react'
 import { useTaskStore } from '../stores/taskStore'
 import { useWorkflowStore } from '../stores/workflowStore'
+import { toast } from '../components/ui/Toast'
 import { mockAnalytics, mockAgentProcess, mockTokenUsage } from '../services/mock'
 import { formatNumber } from '../lib/utils'
+import { TaskDetailModal } from '../components/task/TaskDetailModal'
 
 export default function Home() {
-  const { tasks, loadTasks } = useTaskStore()
+  const { tasks, loadTasks, createTask, executeTask } = useTaskStore()
   const { workflows, loadWorkflows } = useWorkflowStore()
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [newTaskInput, setNewTaskInput] = useState('')
+  const [selectedTask, setSelectedTask] = useState<typeof tasks[0] | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   useEffect(() => {
     loadTasks()
@@ -19,13 +23,25 @@ export default function Home() {
   const stats = mockAnalytics
   const todayTokens = mockTokenUsage[mockTokenUsage.length - 1]?.tokens || 0
 
-  const handleCreateTask = () => {
+  const handleCreateTask = async () => {
     if (!newTaskInput.trim()) return
     setIsCreatingTask(true)
-    setTimeout(() => {
+    try {
+      const task = await createTask(newTaskInput)
+      await executeTask(task.id)
+      toast('success', '任务执行完成！')
+    } catch (e) {
+      toast('error', '任务创建失败')
+    } finally {
       setNewTaskInput('')
       setIsCreatingTask(false)
-    }, 500)
+      loadTasks()
+    }
+  }
+
+  const openDetail = (task: typeof tasks[0]) => {
+    setSelectedTask(task)
+    setIsModalOpen(true)
   }
 
   const runningTasks = tasks.filter(t => t.status === 'running')
@@ -244,7 +260,10 @@ export default function Home() {
                     style={{ width: `${task.progress}%` }}
                   />
                 </div>
-                <button className="px-2.5 py-1 text-xs text-text-muted hover:text-primary hover:bg-primary/10 rounded transition-all">
+                <button
+                  onClick={() => openDetail(task)}
+                  className="px-2.5 py-1 text-xs text-text-muted hover:text-primary hover:bg-primary/10 rounded transition-all"
+                >
                   详情
                 </button>
               </div>
@@ -258,6 +277,13 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {/* Task Detail Modal */}
+      <TaskDetailModal
+        task={selectedTask}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
     </div>
   )
 }

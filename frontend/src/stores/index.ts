@@ -1,3 +1,5 @@
 export { useWorkflowStore } from './workflowStore'
 export { useTaskStore } from './taskStore'
 export { useSettingsStore } from './settingsStore'
+export { useChatStore } from './chatStore'
+export type { ChatMessage, ChatSession } from './chatStore'

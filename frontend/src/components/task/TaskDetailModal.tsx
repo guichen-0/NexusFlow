@@ -1,5 +1,8 @@
-import { X, Play, Trash2, Clock, CheckCircle, AlertCircle, Bot, Zap } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { X, Play, Trash2, Clock, CheckCircle, AlertCircle, Bot, FileText, MessageSquare } from 'lucide-react'
 import type { Task } from '../../types/workflow'
+import { useChatStore } from '../../stores/chatStore'
+import { useTaskStore } from '../../stores/taskStore'
 import { mockWorkflowTemplates } from '../../services/mock'
 
 interface TaskDetailModalProps {
@@ -9,10 +12,36 @@ interface TaskDetailModalProps {
 }
 
 export function TaskDetailModal({ task, isOpen, onClose }: TaskDetailModalProps) {
+  const navigate = useNavigate()
+  const { createSession, sendMessage } = useChatStore()
+  const executeTask = useTaskStore(s => s.executeTask)
+  const deleteTask = useTaskStore(s => s.deleteTask)
   if (!isOpen || !task) return null
 
   const workflow = mockWorkflowTemplates.find(w => w.id === task.workflow_id)
   const nodes = workflow?.nodes || []
+
+  /** 把任务上下文带入聊天页面，开始继续对话 */
+  const handleContinueChat = () => {
+    // 构建上下文消息
+    const contextMsg = `我之前提交了一个任务，请基于以下上下文继续工作：\n\n**原始需求**: ${task.input_text}\n**当前状态**: ${task.status === 'completed' ? '已完成' : task.status === 'failed' ? '失败' : '执行中'}\n${task.output ? `**AI 的回复**: ${task.output.slice(0, 1500)}${task.output.length > 1500 ? '...(已截断)' : ''}` : ''}\n\n请帮我继续完善。`
+    const sessionId = createSession()
+    onClose()
+    navigate('/chat')
+    // 延迟发送，等页面渲染完
+    setTimeout(() => {
+      sendMessage(contextMsg)
+    }, 100)
+  }
+
+  const handleReExecute = () => {
+    if (task) executeTask(task.id)
+  }
+
+  const handleDelete = () => {
+    if (task) deleteTask(task.id)
+    onClose()
+  }
 
   const statusConfig = {
     completed: { label: '已完成', color: 'text-success', bg: 'bg-success/10' },
@@ -153,6 +182,44 @@ export function TaskDetailModal({ task, isOpen, onClose }: TaskDetailModalProps)
             </div>
           )}
 
+          {/* Output Report */}
+          {task.status === 'completed' && task.output && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <FileText className="w-4 h-4 text-primary" />
+                <p className="text-sm text-text-muted">输出报告</p>
+              </div>
+              <div className="p-4 bg-surface-2 rounded-lg border border-border/50 text-sm text-text-secondary whitespace-pre-wrap leading-relaxed max-h-48 overflow-auto">
+                {task.output}
+              </div>
+            </div>
+          )}
+
+          {task.status === 'completed' && !task.output && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <FileText className="w-4 h-4 text-primary" />
+                <p className="text-sm text-text-muted">输出报告</p>
+              </div>
+              <div className="p-4 bg-surface-2 rounded-lg border border-border/50 text-sm text-text-muted text-center">
+                暂无输出报告
+              </div>
+            </div>
+          )}
+
+          {task.status === 'running' && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <FileText className="w-4 h-4 text-primary" />
+                <p className="text-sm text-text-muted">输出报告</p>
+              </div>
+              <div className="p-4 bg-surface-2 rounded-lg border border-border/50 text-sm text-text-muted text-center flex items-center justify-center gap-2">
+                <div className="w-3 h-3 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                任务执行中，报告将在完成后生成...
+              </div>
+            </div>
+          )}
+
           {/* Meta info */}
           <div className="grid grid-cols-3 gap-4">
             <div className="p-3 bg-surface-2 rounded-lg">
@@ -162,16 +229,19 @@ export function TaskDetailModal({ task, isOpen, onClose }: TaskDetailModalProps)
               </p>
             </div>
             <div className="p-3 bg-surface-2 rounded-lg">
-              <p className="text-xs text-text-muted">Token 消耗</p>
-              <p className="text-sm text-text-primary mt-1 flex items-center gap-1">
-                <Zap className="w-3 h-3 text-primary" />
-                ~{Math.round(task.progress * 85).toLocaleString()}
+              <p className="text-xs text-text-muted">执行时间</p>
+              <p className="text-sm text-text-primary mt-1">
+                {task.duration_ms != null
+                  ? `${(task.duration_ms / 1000).toFixed(1)}s`
+                  : task.status === 'completed' || task.status === 'running'
+                    ? '--'
+                    : '--'}
               </p>
             </div>
             <div className="p-3 bg-surface-2 rounded-lg">
-              <p className="text-xs text-text-muted">执行时间</p>
+              <p className="text-xs text-text-muted">当前进度</p>
               <p className="text-sm text-text-primary mt-1">
-                {(task.progress * 0.15).toFixed(1)}s
+                {task.progress}%
               </p>
             </div>
           </div>
@@ -179,13 +249,33 @@ export function TaskDetailModal({ task, isOpen, onClose }: TaskDetailModalProps)
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 p-6 border-t border-border">
+          {/* 继续对话 — 只在有输出时显示 */}
+          {(task.status === 'completed' || task.status === 'failed') && (
+            <button
+              onClick={handleContinueChat}
+              className="px-4 py-2 bg-primary/10 border border-primary/20 rounded-lg text-sm text-primary hover:bg-primary/20 transition-all flex items-center gap-2"
+            >
+              <MessageSquare className="w-4 h-4" />
+              继续对话
+            </button>
+          )}
+
+          {/* 重新执行 */}
           {task.status === 'completed' && (
-            <button className="px-4 py-2 bg-surface-2 border border-border rounded-lg text-sm text-text-secondary hover:text-text-primary hover:border-primary/30 transition-all flex items-center gap-2">
+            <button
+              onClick={handleReExecute}
+              className="px-4 py-2 bg-surface-2 border border-border rounded-lg text-sm text-text-secondary hover:text-text-primary hover:border-primary/30 transition-all flex items-center gap-2"
+            >
               <Play className="w-4 h-4" />
               重新执行
             </button>
           )}
-          <button className="px-4 py-2 bg-danger/10 border border-danger/20 rounded-lg text-sm text-danger hover:bg-danger/20 transition-all flex items-center gap-2">
+
+          {/* 删除 */}
+          <button
+            onClick={handleDelete}
+            className="px-4 py-2 bg-danger/10 border border-danger/20 rounded-lg text-sm text-danger hover:bg-danger/20 transition-all flex items-center gap-2"
+          >
             <Trash2 className="w-4 h-4" />
             删除任务
           </button>

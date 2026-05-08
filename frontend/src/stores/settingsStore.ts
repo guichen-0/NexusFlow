@@ -25,9 +25,9 @@ export const useSettingsStore = create<SettingsState>()(
     (set) => ({
       useMockMode: true,
       theme: 'dark',
-      selectedModel: 'gpt-4o',
+      selectedModel: 'deepseek-v3',
       apiKey: '',
-      apiBaseUrl: 'https://api.openai.com/v1',
+      apiBaseUrl: 'https://api.deepseek.com/v1',
 
       setMockMode: (enabled) => set({ useMockMode: enabled }),
       setTheme: (theme) => set({ theme }),

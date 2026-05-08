@@ -31,6 +31,8 @@ export interface Task {
   status: 'pending' | 'running' | 'completed' | 'failed'
   progress: number
   result?: Record<string, unknown>
+  output?: string
+  duration_ms?: number
   created_at: string
   updated_at?: string
 }

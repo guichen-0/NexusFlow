@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Play, Clock, CheckCircle, XCircle, AlertCircle, Trash2, Eye, Filter, MoreHorizontal } from 'lucide-react'
 import { useTaskStore } from '../stores/taskStore'
+import { toast } from '../components/ui/Toast'
 import { TaskDetailModal } from '../components/task/TaskDetailModal'
 import type { Task } from '../types/workflow'
 
 export default function Tasks() {
-  const { tasks, loadTasks, isLoading } = useTaskStore()
+  const { tasks, loadTasks, deleteTask, isLoading } = useTaskStore()
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [filterStatus, setFilterStatus] = useState<string>('all')
@@ -44,6 +45,14 @@ export default function Tasks() {
   const openDetail = (task: Task) => {
     setSelectedTask(task)
     setIsModalOpen(true)
+  }
+
+  const handleDelete = (task: Task, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (window.confirm(`确定要删除任务"${task.input_text}"吗？`)) {
+      deleteTask(task.id)
+      toast('success', '任务已删除')
+    }
   }
 
   return (
@@ -154,7 +163,10 @@ export default function Tasks() {
                     >
                       <Eye className="w-4 h-4 text-text-muted group-hover:text-primary" />
                     </button>
-                    <button className="p-2 hover:bg-danger/10 rounded-lg transition-colors group">
+                    <button
+                      onClick={(e) => handleDelete(task, e)}
+                      className="p-2 hover:bg-danger/10 rounded-lg transition-colors group"
+                    >
                       <Trash2 className="w-4 h-4 text-text-muted group-hover:text-danger" />
                     </button>
                   </div>

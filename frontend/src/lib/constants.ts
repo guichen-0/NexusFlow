@@ -31,5 +31,9 @@ export const DEFAULT_MODELS = [
   { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI', capability: '旗舰' },
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI', capability: '高效' },
   { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'OpenAI', capability: '基础' },
-  { id: 'mimo-v2.5', name: 'MiMo V2.5', provider: 'Xiaomi', capability: '旗舰' },
+  { id: 'mimo', name: 'MiMo', provider: 'MiMo', capability: '多模态' },
+  { id: 'deepseek-v3', name: 'DeepSeek V3', provider: 'DeepSeek', capability: '旗舰' },
+  { id: 'deepseek-r1', name: 'DeepSeek R1', provider: 'DeepSeek', capability: '推理' },
+  { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'DeepSeek', capability: '极速' },
+  { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', provider: 'DeepSeek', capability: '旗舰Pro' },
 ] as const

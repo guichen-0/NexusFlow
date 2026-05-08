@@ -1,5 +1,7 @@
 import { useSettingsStore } from '../stores/settingsStore'
-import { Moon, Sun, Bot, Key, Globe, Save } from 'lucide-react'
+import { Moon, Sun, Bot, Key, Globe, Save, Zap, CheckCircle, XCircle, Loader2 } from 'lucide-react'
+import { toast } from '../components/ui/Toast'
+import { useState } from 'react'
 
 export default function Settings() {
   const {
@@ -10,15 +12,81 @@ export default function Settings() {
     selectedModel,
     setSelectedModel,
     apiKey,
+    apiBaseUrl,
     setApiConfig
   } = useSettingsStore()
 
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'fail'>('idle')
+  const [testMessage, setTestMessage] = useState('')
+
   const models = [
+    { id: 'deepseek-v3', name: 'DeepSeek V3', provider: 'DeepSeek' },
+    { id: 'deepseek-r1', name: 'DeepSeek R1', provider: 'DeepSeek' },
+    { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', provider: 'DeepSeek' },
+    { id: 'deepseek-v4-pro', name: 'DeepSeek V4 Pro', provider: 'DeepSeek' },
     { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI' },
     { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI' },
     { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'OpenAI' },
-    { id: 'mimo-v2.5', name: 'MiMo V2.5', provider: 'Xiaomi' }
+    { id: 'mimo', name: 'MiMo', provider: 'MiMo' },
   ]
+
+  const testConnection = async () => {
+    if (!apiKey) {
+      toast('error', '请先填写 API Key')
+      return
+    }
+    if (!apiBaseUrl) {
+      toast('error', '请先填写 API Base URL')
+      return
+    }
+
+    setTestStatus('testing')
+    setTestMessage('正在连接...')
+
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 15000)
+
+      const response = await fetch('/api/ai-proxy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-AI-Target': apiBaseUrl.replace(/\/+$/, ''),
+          'X-AI-Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: selectedModel,
+          messages: [{ role: 'user', content: 'Hi' }],
+          max_tokens: 5,
+        }),
+        signal: controller.signal,
+      })
+      clearTimeout(timeout)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        let msg = `HTTP ${response.status}`
+        try {
+          const err = JSON.parse(errorText)
+          msg = err.error?.message || msg
+        } catch { /* use default */ }
+        throw new Error(msg)
+      }
+
+      setTestStatus('success')
+      setTestMessage(`${selectedModel} 连接成功`)
+      toast('success', 'API 连接测试通过')
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : '连接失败'
+      setTestStatus('fail')
+      setTestMessage(msg)
+      toast('error', `连接失败: ${msg}`)
+    }
+  }
+
+  const handleSave = () => {
+    toast('success', '设置已保存')
+  }
 
   return (
     <div className="max-w-3xl space-y-6 animate-in">
@@ -60,7 +128,7 @@ export default function Settings() {
         {useMockMode && (
           <div className="mt-4 p-3 bg-warning/5 border border-warning/20 rounded-lg">
             <p className="text-sm text-warning">
-              当前为 Mock 模式，AI 响应均为模拟数据。申请 MiMo Token 后可切换到真实 API。
+              当前为 Mock 模式，AI 响应均为模拟数据。配置 API Key 后可切换到真实 API。
             </p>
           </div>
         )}
@@ -167,9 +235,9 @@ export default function Settings() {
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                   <input
                     type="text"
-                    value={apiKey || 'https://api.openai.com/v1'}
+                    value={apiBaseUrl || 'https://api.deepseek.com/v1'}
                     onChange={(e) => setApiConfig('apiBaseUrl', e.target.value)}
-                    placeholder="https://api.openai.com/v1"
+                    placeholder="https://api.deepseek.com/v1"
                     className="w-full pl-10 pr-4 py-2.5 bg-surface-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary"
                   />
                 </div>
@@ -193,6 +261,33 @@ export default function Settings() {
                   {useMockMode ? 'Mock 模式已启用，API Key 不会被使用' : '请输入你的 OpenAI 或兼容 API Key'}
                 </p>
               </div>
+
+              {/* Test Connection Button */}
+              {!useMockMode && (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={testConnection}
+                    disabled={testStatus === 'testing'}
+                    className="px-4 py-2 bg-surface-2 border border-border rounded-lg text-sm text-text-secondary hover:text-primary hover:border-primary/30 transition-all flex items-center gap-2 disabled:opacity-50"
+                  >
+                    {testStatus === 'testing' ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : testStatus === 'success' ? (
+                      <CheckCircle className="w-4 h-4 text-success" />
+                    ) : testStatus === 'fail' ? (
+                      <XCircle className="w-4 h-4 text-danger" />
+                    ) : (
+                      <Zap className="w-4 h-4" />
+                    )}
+                    {testStatus === 'testing' ? '测试中...' : '测试连接'}
+                  </button>
+                  {testMessage && (
+                    <span className={`text-xs ${testStatus === 'success' ? 'text-success' : testStatus === 'fail' ? 'text-danger' : 'text-text-muted'}`}>
+                      {testMessage}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -200,7 +295,7 @@ export default function Settings() {
 
       {/* Save Button */}
       <div className="flex justify-end">
-        <button className="px-6 py-3 bg-gradient-to-r from-primary to-accent rounded-lg font-medium text-white hover:opacity-90 transition-opacity flex items-center gap-2">
+        <button onClick={handleSave} className="px-6 py-3 bg-gradient-to-r from-primary to-accent rounded-lg font-medium text-white hover:opacity-90 transition-opacity flex items-center gap-2">
           <Save className="w-4 h-4" />
           保存设置
         </button>

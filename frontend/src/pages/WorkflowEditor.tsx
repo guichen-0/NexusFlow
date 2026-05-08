@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   ReactFlow,
@@ -19,6 +19,7 @@ import '@xyflow/react/dist/style.css'
 import { ArrowLeft, Info, CheckCircle2, Loader2, Clock, AlertCircle, Zap } from 'lucide-react'
 import { mockWorkflowTemplates } from '../services/mock'
 import type { WorkflowNode } from '../types/workflow'
+import { toast } from '../components/ui/Toast'
 
 const nodeStatusColors: Record<string, string> = {
   pending: '#64748b',
@@ -99,11 +100,22 @@ export default function WorkflowEditor() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [selectedNode, setSelectedNode] = useState<WorkflowNode | null>(null)
+  const [isExecuting, setIsExecuting] = useState(false)
+  const [nodeStatuses, setNodeStatuses] = useState<Record<string, 'pending' | 'running' | 'completed' | 'failed'>>({})
 
   const workflow = useMemo(
     () => mockWorkflowTemplates.find(w => w.id === id),
     [id]
   )
+
+  // Initialize node statuses when workflow changes
+  useEffect(() => {
+    if (workflow?.nodes) {
+      const initial: Record<string, 'pending' | 'running' | 'completed' | 'failed'> = {}
+      workflow.nodes.forEach(n => { initial[n.id] = 'pending' })
+      setNodeStatuses(initial)
+    }
+  }, [workflow])
 
   // Convert workflow nodes to React Flow elements with layered layout
   const { nodes, edges } = useMemo(() => {
@@ -145,6 +157,7 @@ export default function WorkflowEditor() {
       const lvl = levels.get(node.id) ?? 0
       const siblings = levelGroups.get(lvl) ?? [node]
       const siblingIdx = siblings.indexOf(node)
+      const nodeStatus = nodeStatuses[node.id] || 'pending'
 
       flowNodes.push({
         id: node.id,
@@ -156,8 +169,8 @@ export default function WorkflowEditor() {
         data: {
           label: node.label,
           nodeType: node.type,
-          status: idx === 1 ? 'running' : idx === 0 ? 'completed' : 'pending',
-          statusText: idx === 0 ? '已完成' : idx === 1 ? '执行中' : '等待中',
+          status: nodeStatus,
+          statusText: nodeStatus === 'completed' ? '已完成' : nodeStatus === 'running' ? '执行中' : nodeStatus === 'failed' ? '失败' : '等待中',
           icon: nodeTypeIcons[node.type] || '⚡',
         },
       })
@@ -185,6 +198,71 @@ export default function WorkflowEditor() {
     const originalNode = workflow?.nodes.find(n => n.id === node.id)
     setSelectedNode(originalNode ?? null)
   }, [workflow])
+
+  // Topological sort for execution order
+  const getExecutionOrder = useCallback(() => {
+    if (!workflow?.nodes) return []
+    const nodeMap = new Map(workflow.nodes.map(n => [n.id, n]))
+    const inDegree = new Map<string, number>()
+    const adjList = new Map<string, string[]>()
+
+    workflow.nodes.forEach(n => {
+      inDegree.set(n.id, n.depends_on.length)
+      adjList.set(n.id, [])
+    })
+    workflow.nodes.forEach(n => {
+      n.depends_on.forEach(depId => {
+        const adj = adjList.get(depId) || []
+        adj.push(n.id)
+        adjList.set(depId, adj)
+      })
+    })
+
+    const queue: string[] = []
+    const result: string[] = []
+    inDegree.forEach((deg, id) => {
+      if (deg === 0) queue.push(id)
+    })
+
+    while (queue.length > 0) {
+      const nodeId = queue.shift()!
+      result.push(nodeId)
+      const adjs = adjList.get(nodeId) || []
+      adjs.forEach(adj => {
+        const newDeg = (inDegree.get(adj) || 0) - 1
+        inDegree.set(adj, newDeg)
+        if (newDeg === 0) queue.push(adj)
+      })
+    }
+    return result
+  }, [workflow])
+
+  const handleExecute = useCallback(async () => {
+    if (!workflow?.nodes || isExecuting) return
+    setIsExecuting(true)
+    toast('info', '开始执行工作流...')
+
+    // Reset all nodes to pending
+    const initial: Record<string, 'pending' | 'running' | 'completed' | 'failed'> = {}
+    workflow.nodes.forEach(n => { initial[n.id] = 'pending' })
+    setNodeStatuses(initial)
+
+    // Wait a bit then start execution
+    await new Promise(r => setTimeout(r, 500))
+
+    // Get execution order
+    const order = getExecutionOrder()
+
+    // Execute nodes in order
+    for (const nodeId of order) {
+      setNodeStatuses(prev => ({ ...prev, [nodeId]: 'running' }))
+      await new Promise(r => setTimeout(r, 800 + Math.random() * 400))
+      setNodeStatuses(prev => ({ ...prev, [nodeId]: 'completed' }))
+    }
+
+    setIsExecuting(false)
+    toast('success', '工作流执行完成！')
+  }, [workflow, isExecuting, getExecutionOrder])
 
   if (!workflow) {
     return (
@@ -225,9 +303,22 @@ export default function WorkflowEditor() {
           <span className="px-3 py-1.5 bg-primary/10 text-primary text-sm font-medium rounded-full">
             {workflow.nodes.length} 个节点
           </span>
-          <button className="px-4 py-2 bg-gradient-to-r from-primary to-accent text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2">
-            <Zap className="w-4 h-4" />
-            执行工作流
+          <button
+            onClick={handleExecute}
+            disabled={isExecuting}
+            className="px-4 py-2 bg-gradient-to-r from-primary to-accent text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2 disabled:opacity-50"
+          >
+            {isExecuting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                执行中...
+              </>
+            ) : (
+              <>
+                <Zap className="w-4 h-4" />
+                执行工作流
+              </>
+            )}
           </button>
         </div>
       </div>

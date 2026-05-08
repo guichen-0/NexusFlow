@@ -4,8 +4,8 @@ import { mockAgentProcess } from '../services/mock'
 import { formatNumber } from '../lib/utils'
 
 const agentIcons = [BrainCircuit, Cpu, Activity, Zap, CheckCircle2]
-const agentModels = ['GPT-4o', 'GPT-4o', 'GPT-4o-mini', 'GPT-3.5-turbo', 'GPT-3.5-turbo']
-const agentTokens = [2450, 8900, 0, 0, 0]
+const agentModels = ['GPT-4o', 'DeepSeek V3', 'MiMo', 'GPT-4o-mini', 'DeepSeek V4 Pro', 'DeepSeek R1', 'GPT-3.5-turbo', 'DeepSeek V4 Flash']
+const agentTokens = [2450, 8900, 3200, 0, 0, 0, 0, 0]
 
 export default function Agents() {
   const agents = mockAgentProcess
