@@ -81,7 +81,7 @@ export function Header() {
                 className="fixed inset-0 z-[99]"
                 onClick={() => setShowNotifications(false)}
               />
-              <div className="absolute right-0 top-12 w-80 glass rounded-xl border border-border shadow-2xl shadow-black/40 z-[100] animate-in">
+              <div className="absolute right-0 top-12 w-80 glass rounded-xl border border-border shadow-2xl shadow-black/40 z-[10000] animate-in">
                 <div className="flex items-center justify-between p-4 border-b border-border">
                   <h3 className="font-semibold text-text-primary">通知</h3>
                   <div className="flex items-center gap-2">
