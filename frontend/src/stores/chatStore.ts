@@ -2,6 +2,22 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { useSettingsStore } from './settingsStore'
 
+// ======= 模块级请求管理（独立于组件生命周期） =======
+let _activeController: AbortController | null = null
+let _activeFetchInProgress = false
+
+export function getActiveRequestStatus() {
+  return { inProgress: _activeFetchInProgress }
+}
+
+export function cancelCurrentRequest() {
+  if (_activeController) {
+    _activeController.abort()
+    _activeController = null
+    _activeFetchInProgress = false
+  }
+}
+
 export interface CodeExecution {
   language: string
   exit_code: number
@@ -42,6 +58,9 @@ interface ChatState {
 
   // 消息发送
   sendMessage: (content: string) => Promise<void>
+
+  // 取消当前请求
+  cancelRequest: () => void
 
   // 内部
   setActiveSessionId: (id: string | null) => void
@@ -104,7 +123,17 @@ export const useChatStore = create<ChatState>()(
         set({ activeSessionId: id })
       },
 
+      cancelRequest: () => {
+        cancelCurrentRequest()
+        set({ isLoading: false, streamingContent: '' })
+      },
+
       sendMessage: async (content: string) => {
+        // 取消之前的未完成请求
+        if (_activeFetchInProgress) {
+          cancelCurrentRequest()
+        }
+
         const state = get()
         let sessionId = state.activeSessionId
 
@@ -186,6 +215,11 @@ export const useChatStore = create<ChatState>()(
             content: m.content,
           }))
 
+          // 创建 AbortController 使请求独立于组件生命周期
+          _activeController = new AbortController()
+          _activeFetchInProgress = true
+          const signal = _activeController.signal
+
           // 通过后端代理调用 AI API
           const response = await fetch(`${BACKEND_BASE}/chat`, {
             method: 'POST',
@@ -197,6 +231,7 @@ export const useChatStore = create<ChatState>()(
               api_key: apiKey,
               api_base_url: apiBaseUrl,
             }),
+            signal,
           })
 
           if (!response.ok) {
@@ -259,6 +294,8 @@ export const useChatStore = create<ChatState>()(
           }
 
           // 流式结束，将完整消息写入会话
+          _activeController = null
+          _activeFetchInProgress = false
           const assistantMsg: ChatMessage = {
             id: generateId(),
             role: 'assistant',
@@ -279,6 +316,15 @@ export const useChatStore = create<ChatState>()(
             streamingContent: '',
           }))
         } catch (error) {
+          _activeController = null
+          _activeFetchInProgress = false
+
+          // 手动取消的不显示错误
+          if (error instanceof DOMException && error.name === 'AbortError') {
+            set({ isLoading: false, streamingContent: '' })
+            return
+          }
+
           const errMsg = error instanceof Error ? error.message : '未知错误'
           const errorReply: ChatMessage = {
             id: generateId(),
