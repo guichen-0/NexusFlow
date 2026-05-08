@@ -6,6 +6,7 @@ import Workflows from './pages/Workflows'
 import WorkflowEditor from './pages/WorkflowEditor'
 import Tasks from './pages/Tasks'
 import Chat from './pages/Chat'
+import Skills from './pages/Skills'
 import Agents from './pages/Agents'
 import Analytics from './pages/Analytics'
 import Settings from './pages/Settings'
@@ -17,6 +18,7 @@ function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<Home />} />
           <Route path="/chat" element={<Chat />} />
+          <Route path="/skills" element={<Skills />} />
           <Route path="/workflows" element={<Workflows />} />
           <Route path="/workflows/:id" element={<WorkflowEditor />} />
           <Route path="/tasks" element={<Tasks />} />

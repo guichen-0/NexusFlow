@@ -90,6 +90,7 @@ export default function Chat() {
                   key={msg.id}
                   role={msg.role === 'assistant' ? 'assistant' : 'user'}
                   content={msg.content}
+                  executions={msg.executions}
                 />
               ))}
 

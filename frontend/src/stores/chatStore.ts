@@ -2,11 +2,22 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { useSettingsStore } from './settingsStore'
 
+export interface CodeExecution {
+  language: string
+  exit_code: number
+  stdout: string
+  stderr: string
+  duration_ms: number
+  success: boolean
+  timed_out: boolean
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: number
+  executions?: CodeExecution[]
 }
 
 export interface ChatSession {
@@ -43,6 +54,8 @@ function generateId(): string {
 function truncateTitle(content: string): string {
   return content.length > 30 ? content.slice(0, 30) + '...' : content
 }
+
+const BACKEND_BASE = '/api/backend/v1'
 
 export const useChatStore = create<ChatState>()(
   persist(
@@ -173,18 +186,16 @@ export const useChatStore = create<ChatState>()(
             content: m.content,
           }))
 
-          // 调用代理
-          const response = await fetch('/api/ai-proxy', {
+          // 通过后端代理调用 AI API
+          const response = await fetch(`${BACKEND_BASE}/chat`, {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-AI-Target': apiBaseUrl.replace(/\/+$/, ''),
-              'X-AI-Authorization': `Bearer ${apiKey}`,
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               model: selectedModel,
               messages: apiMessages,
               stream: true,
+              api_key: apiKey,
+              api_base_url: apiBaseUrl,
             }),
           })
 
@@ -193,7 +204,7 @@ export const useChatStore = create<ChatState>()(
             let errMsg = `API 错误 (${response.status})`
             try {
               const parsed = JSON.parse(errText)
-              errMsg = parsed.error?.message || parsed.message || errMsg
+              errMsg = parsed.detail || parsed.error?.message || errMsg
             } catch {
               errMsg += `: ${errText.slice(0, 200)}`
             }
@@ -207,6 +218,7 @@ export const useChatStore = create<ChatState>()(
           const decoder = new TextDecoder()
           let fullContent = ''
           let buffer = ''
+          let pendingExecutions: CodeExecution[] = []
 
           set({ streamingContent: '' })
 
@@ -225,13 +237,23 @@ export const useChatStore = create<ChatState>()(
               if (data === '[DONE]') continue
               try {
                 const parsed = JSON.parse(data)
+                // 处理执行结果事件
+                if (parsed.type === 'executions' && parsed.results) {
+                  pendingExecutions = pendingExecutions.concat(parsed.results)
+                  continue
+                }
+                // 处理错误
+                if (parsed.error) {
+                  throw new Error(parsed.error.message || JSON.stringify(parsed.error))
+                }
                 const delta = parsed.choices?.[0]?.delta?.content
                 if (delta) {
                   fullContent += delta
                   set({ streamingContent: fullContent })
                 }
-              } catch {
-                // 跳过无法解析的行
+              } catch (e) {
+                // 如果是我们自己抛出的错误，继续抛出
+                if (e instanceof Error && e.message !== '无法解析的 SSE 数据') throw e
               }
             }
           }
@@ -242,6 +264,7 @@ export const useChatStore = create<ChatState>()(
             role: 'assistant',
             content: fullContent,
             timestamp: Date.now(),
+            executions: pendingExecutions.length > 0 ? pendingExecutions : undefined,
           }
 
           set(state => ({

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import { Task } from '../types/workflow'
 import { useSettingsStore } from './settingsStore'
 
@@ -8,6 +9,8 @@ function persistTasks(tasks: Task[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks))
 }
 
+const BACKEND_BASE = '/api/backend/v1'
+
 /**
  * Mock 模式下生成与任务输入相关的模拟输出
  */
@@ -15,7 +18,6 @@ function generateMockOutput(task: Task): string {
   const now = new Date().toLocaleString('zh-CN')
   const input = task.input_text
 
-  // 根据输入文本智能生成相关内容
   const lines = [
     `## 任务执行报告`,
     ``,
@@ -34,7 +36,6 @@ function generateMockOutput(task: Task): string {
     ``,
   ]
 
-  // 根据输入关键词生成相关内容
   const lowerInput = input.toLowerCase()
   if (lowerInput.includes('代码') || lowerInput.includes('code') || lowerInput.includes('开发') || lowerInput.includes('功能')) {
     lines.push(
@@ -69,21 +70,6 @@ function generateMockOutput(task: Task): string {
       ``,
       `> 提示：当前为 Mock 模式，以上为模拟输出。切换到真实 API 模式可获得 AI 实际生成的内容。`,
     )
-  } else if (lowerInput.includes('文章') || lowerInput.includes('写') || lowerInput.includes('内容') || lowerInput.includes('翻译')) {
-    lines.push(
-      `- **内容类型**: 已识别为内容创作类需求`,
-      `- **目标受众**: 通用技术读者`,
-      `- **内容结构**: 引言 → 核心内容 → 总结`,
-      ``,
-      `### 内容大纲`,
-      ``,
-      `1. **引言部分**: 介绍主题背景和核心观点`,
-      `2. **核心论述**: 分 3-4 个子主题展开讨论`,
-      `3. **案例/示例**: 配合具体案例增强说服力`,
-      `4. **总结展望**: 归纳要点并展望未来趋势`,
-      ``,
-      `> 提示：当前为 Mock 模式，以上为模拟输出。切换到真实 API 模式可获得 AI 实际生成的内容。`,
-    )
   } else {
     lines.push(
       `- **任务类型**: 通用 AI 任务`,
@@ -107,23 +93,18 @@ function generateMockOutput(task: Task): string {
 }
 
 /**
- * 真实模式下调用 OpenAI 兼容 API（流式）
- * 通过 Vite 代理转发请求，避免浏览器 CORS 限制
+ * 通过后端代理调用 AI API（流式）
  */
-async function callAI_API(
-  baseUrl: string,
+async function callAIViaBackend(
   apiKey: string,
+  apiBaseUrl: string,
   model: string,
   inputText: string,
   onProgress: (progress: number, partialOutput: string) => void,
 ): Promise<string> {
-  const response = await fetch('/api/ai-proxy', {
+  const response = await fetch(`${BACKEND_BASE}/chat`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-AI-Target': baseUrl.replace(/\/+$/, ''),
-      'X-AI-Authorization': `Bearer ${apiKey}`,
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model,
       messages: [
@@ -137,6 +118,8 @@ async function callAI_API(
         }
       ],
       stream: true,
+      api_key: apiKey,
+      api_base_url: apiBaseUrl,
     }),
   })
 
@@ -145,11 +128,7 @@ async function callAI_API(
     let errorMessage = `API 请求失败 (${response.status})`
     try {
       const errorJson = JSON.parse(errorText)
-      errorMessage = errorJson.error?.message || errorJson.message || errorMessage
-      // 如果代理返回了 hint，追加到错误信息
-      if (errorJson.error?.hint) {
-        errorMessage += `\n\n${errorJson.error.hint}`
-      }
+      errorMessage = errorJson.detail || errorJson.error?.message || errorMessage
     } catch {
       errorMessage += `: ${errorText.slice(0, 300)}`
     }
@@ -162,9 +141,8 @@ async function callAI_API(
   const decoder = new TextDecoder()
   let fullContent = ''
   let buffer = ''
-  // 预估步数，用于计算进度
-  let estimatedTokens = 100
   let collectedTokens = 0
+  let estimatedTokens = 100
 
   while (true) {
     const { done, value } = await reader.read()
@@ -182,6 +160,9 @@ async function callAI_API(
 
       try {
         const parsed = JSON.parse(data)
+        if (parsed.error) {
+          throw new Error(parsed.error.message || JSON.stringify(parsed.error))
+        }
         const delta = parsed.choices?.[0]?.delta?.content
         if (delta) {
           fullContent += delta
@@ -189,8 +170,8 @@ async function callAI_API(
           const progress = Math.min(95, Math.round((collectedTokens / estimatedTokens) * 100))
           onProgress(progress, fullContent)
         }
-      } catch {
-        // 跳过无法解析的行
+      } catch (e) {
+        if (e instanceof Error && e.message !== '无法解析的 SSE 数据') throw e
       }
     }
   }
@@ -305,7 +286,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       const durationMs = Date.now() - startTime
       get().updateTask(taskId, { output, duration_ms: durationMs })
     } else {
-      // ===== 真实 API 模式 =====
+      // ===== 真实 API 模式（通过后端代理）=====
       if (!apiKey) {
         const output = `## 执行失败\n\n未配置 API Key。请前往「设置」页面填写 API Key 后重试。`
         get().updateTask(taskId, {
@@ -321,9 +302,9 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
       try {
         const startTime = Date.now()
-        const fullContent = await callAI_API(
-          apiBaseUrl,
+        const fullContent = await callAIViaBackend(
           apiKey,
+          apiBaseUrl,
           selectedModel,
           task.input_text,
           (progress, partial) => {
@@ -370,7 +351,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
           `2. 检查 Base URL 是否正确（如 \`https://api.openai.com/v1\`）`,
           `3. 检查网络连接是否正常`,
           `4. 检查模型名称是否受支持`,
-          `5. 可在「设置」页面点击「测试连接」验证配置`,
+          `5. 确保后端服务已启动（\`python run.py\`）`,
         ].join('\n')
         get().updateTask(taskId, {
           status: 'failed',
