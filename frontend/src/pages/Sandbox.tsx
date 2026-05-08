@@ -1,66 +1,130 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Terminal, Plus, Trash2, FolderOpen, Clock, Shield,
   CheckCircle, XCircle, AlertTriangle, Play, RefreshCw,
+  Code2, Globe, HardDrive, Cpu, Monitor,
 } from 'lucide-react'
 import { useSandboxStore } from '../stores/sandboxStore'
 import PermissionEditor from '../components/sandbox/PermissionEditor'
 import type { Permission, ExecutionRecord } from '../types/sandbox'
 import { apiCreatePermission, apiDeletePermission, apiCreateWorkspace, apiDeleteWorkspace } from '../types/sandbox'
 
-type Tab = 'workspaces' | 'executions' | 'permissions'
+type Tab = 'workspaces' | 'executions' | 'permissions' | 'terminal'
+
+// 权限分类
+const PERM_CATEGORIES: Record<string, { label: string; icon: any; ids: string[] }> = {
+  basic: { label: '基础', icon: Shield, ids: ['isolated'] },
+  data: { label: '数据', icon: HardDrive, ids: ['data-analysis', 'machine-learning'] },
+  network: { label: '网络', icon: Globe, ids: ['web-request', 'web-scraping'] },
+  dev: { label: '开发', icon: Code2, ids: ['frontend-dev', 'terminal', 'dev-tools'] },
+  full: { label: '全能', icon: Cpu, ids: ['full-access'] },
+}
 
 export default function Sandbox() {
   const {
     workspaces, executions, permissions,
     createWorkspace, deleteWorkspace, fetchExecutions, fetchPermissions,
-    refreshWorkspace, executeCode,
+    refreshWorkspace, executeCode, executeTerminal, activeWorkspaceId,
+    setActiveWorkspace,
   } = useSandboxStore()
 
   const [activeTab, setActiveTab] = useState<Tab>('workspaces')
   const [expandedWorkspace, setExpandedWorkspace] = useState<string | null>(null)
   const [showPermEditor, setShowPermEditor] = useState(false)
   const [editingPerm, setEditingPerm] = useState<Permission | null>(null)
-  const [quickCode, setQuickCode] = useState('print("Hello!")')
+  const [quickCode, setQuickCode] = useState('# 在此输入代码\nprint("Hello from NexusFlow!")')
   const [quickLang, setQuickLang] = useState('python')
   const [quickResult, setQuickResult] = useState<ExecutionRecord | null>(null)
   const [isQuickRunning, setIsQuickRunning] = useState(false)
   const [newWsPerm, setNewWsPerm] = useState('')
+  const [error, setError] = useState('')
+  const [permLoading, setPermLoading] = useState(true)
+
+  // 终端状态
+  const [termInput, setTermInput] = useState('')
+  const [termHistory, setTermHistory] = useState<string[]>([])
+  const [termHistoryIdx, setTermHistoryIdx] = useState(-1)
+  const [isTermRunning, setIsTermRunning] = useState(false)
 
   useEffect(() => {
-    fetchExecutions().catch(() => {})
-    fetchPermissions().catch(() => {})
+    setPermLoading(true)
+    Promise.all([
+      fetchExecutions(),
+      fetchPermissions(),
+    ])
+      .catch(() => setError('无法连接后端服务'))
+      .finally(() => setPermLoading(false))
   }, [])
 
   const handleCreateWorkspace = async () => {
+    setError('')
     try {
       await createWorkspace(newWsPerm || undefined)
       setNewWsPerm('')
     } catch (e: any) {
-      alert(e.message)
+      setError(e.message)
     }
   }
 
   const handleDeleteWorkspace = async (id: string) => {
     if (!confirm('确定删除此工作空间？所有文件将被清除。')) return
+    setError('')
     try {
       await deleteWorkspace(id)
       if (expandedWorkspace === id) setExpandedWorkspace(null)
     } catch (e: any) {
-      alert(e.message)
+      setError(e.message)
     }
   }
 
   const handleQuickRun = async () => {
+    setError('')
     setIsQuickRunning(true)
     setQuickResult(null)
     try {
       const record = await executeCode(quickCode, quickLang)
       setQuickResult(record)
     } catch (e: any) {
-      alert(e.message)
+      setError(e.message)
     } finally {
       setIsQuickRunning(false)
+    }
+  }
+
+  const handleTermKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const nextIdx = termHistoryIdx < termHistory.length - 1 ? termHistoryIdx + 1 : termHistoryIdx
+      setTermHistoryIdx(nextIdx)
+      if (nextIdx >= 0) setTermInput(termHistory[termHistory.length - 1 - nextIdx])
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const nextIdx = termHistoryIdx > 0 ? termHistoryIdx - 1 : -1
+      setTermHistoryIdx(nextIdx)
+      if (nextIdx >= 0) setTermInput(termHistory[termHistory.length - 1 - nextIdx])
+      else setTermInput('')
+    } else if (e.key === 'Enter') {
+      handleRunTerminal()
+    }
+  }, [termInput, termHistory, termHistoryIdx])
+
+  const handleRunTerminal = async () => {
+    const cmd = termInput.trim()
+    if (!cmd) return
+    setError('')
+    setIsTermRunning(true)
+    setTermHistory(prev => [...prev, cmd])
+    setTermHistoryIdx(-1)
+    setTermInput('')
+    try {
+      if (!activeWorkspaceId) {
+        await createWorkspace()
+      }
+      await executeTerminal(cmd)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setIsTermRunning(false)
     }
   }
 
@@ -71,7 +135,7 @@ export default function Sandbox() {
       setShowPermEditor(false)
       setEditingPerm(null)
     } catch (e: any) {
-      alert(e.message)
+      setError(e.message)
     }
   }
 
@@ -81,7 +145,7 @@ export default function Sandbox() {
       await apiDeletePermission(id)
       await fetchPermissions()
     } catch (e: any) {
-      alert(e.message)
+      setError(e.message)
     }
   }
 
@@ -94,7 +158,8 @@ export default function Sandbox() {
   const tabs: { key: Tab; label: string; icon: any; count: number }[] = [
     { key: 'workspaces', label: '工作空间', icon: FolderOpen, count: workspaces.length },
     { key: 'executions', label: '执行历史', icon: Clock, count: executions.length },
-    { key: 'permissions', label: '权限管理', icon: Shield, count: permissions.length },
+    { key: 'permissions', label: '权限模板', icon: Shield, count: permissions.length },
+    { key: 'terminal', label: '终端', icon: Terminal, count: executions.filter(e => e.language === 'terminal').length },
   ]
 
   return (
@@ -107,13 +172,13 @@ export default function Sandbox() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-text-primary">沙箱管理</h1>
-            <p className="text-sm text-text-secondary">代码执行环境、工作空间和权限管理</p>
+            <p className="text-sm text-text-secondary">代码执行环境、工作空间、权限和终端</p>
           </div>
         </div>
         <div className="flex gap-2">
           <div className="flex items-center gap-3 text-xs text-text-muted mr-4">
-            <span>{workspaces.length} 个工作空间</span>
-            <span>{executions.length} 次执行</span>
+            <span>{workspaces.length} 工作空间</span>
+            <span>{executions.length} 执行</span>
           </div>
           <button
             onClick={handleCreateWorkspace}
@@ -125,19 +190,34 @@ export default function Sandbox() {
         </div>
       </div>
 
+      {/* 错误提示 */}
+      {error && (
+        <div className="flex items-center gap-2 px-4 py-3 bg-danger/10 border border-danger/20 rounded-xl text-xs text-danger">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError('')} className="text-danger/60 hover:text-danger">
+            <XCircle className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* 新建工作空间选项 */}
       <div className="flex items-center gap-3 bg-surface-2 rounded-xl px-4 py-2.5">
         <span className="text-xs text-text-muted">创建时绑定权限：</span>
-        <select
-          value={newWsPerm}
-          onChange={(e) => setNewWsPerm(e.target.value)}
-          className="bg-surface-1 border border-border-tertiary rounded-lg px-2 py-1 text-xs text-text-secondary focus:outline-none focus:border-primary"
-        >
-          <option value="">不绑定（使用默认权限）</option>
-          {permissions.map(p => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        {permLoading ? (
+          <span className="text-xs text-text-muted">加载中...</span>
+        ) : (
+          <select
+            value={newWsPerm}
+            onChange={(e) => setNewWsPerm(e.target.value)}
+            className="bg-surface-1 border border-border-tertiary rounded-lg px-2 py-1 text-xs text-text-secondary focus:outline-none focus:border-primary"
+          >
+            <option value="">不绑定（使用默认权限）</option>
+            {permissions.map(p => (
+              <option key={p.id} value={p.id}>{p.name} — {p.description.slice(0, 30)}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Tab 切换 */}
@@ -188,7 +268,7 @@ export default function Sandbox() {
                   <div>
                     <div className="flex items-center gap-2">
                       <FolderOpen className="w-4 h-4 text-warning" />
-                      <span className="text-sm font-medium text-text-primary">{ws.id}</span>
+                      <span className="text-sm font-medium text-text-primary">{ws.id.slice(0, 12)}</span>
                       {ws.permission_name && (
                         <span className="px-1.5 py-0.5 rounded text-xs bg-primary/10 text-primary">
                           {ws.permission_name}
@@ -258,7 +338,11 @@ export default function Sandbox() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-text-primary">{exec.language}</span>
+                      <span className={`text-sm font-medium text-text-primary ${
+                        exec.language === 'terminal' ? 'font-mono' : ''
+                      }`}>
+                        {exec.language === 'terminal' ? '$' : ''} {exec.language}
+                      </span>
                       {exec.permission_name && (
                         <span className="px-1.5 py-0.5 rounded text-xs bg-primary/10 text-primary">
                           {exec.permission_name}
@@ -293,69 +377,168 @@ export default function Sandbox() {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {permissions.map(perm => (
-              <div
-                key={perm.id}
-                className={`border rounded-xl p-4 ${
-                  perm.is_builtin
-                    ? 'border-border-secondary bg-surface-2'
-                    : 'border-primary/20 bg-primary/5'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <Shield className={`w-4 h-4 ${perm.is_builtin ? 'text-text-muted' : 'text-primary'}`} />
-                    <span className="text-sm font-semibold text-text-primary">{perm.name}</span>
-                    {perm.is_builtin && (
-                      <span className="px-1.5 py-0.5 rounded text-xs bg-surface-tertiary text-text-muted">内置</span>
-                    )}
+          {permLoading ? (
+            <div className="text-center py-12 text-text-muted text-sm">加载权限模板中...</div>
+          ) : (
+            Object.entries(PERM_CATEGORIES).map(([catKey, cat]) => {
+              const catPerms = permissions.filter(p => cat.ids.includes(p.id))
+              if (catPerms.length === 0) return null
+              return (
+                <div key={catKey} className="mb-6">
+                  <div className="flex items-center gap-2 mb-3">
+                    <cat.icon className="w-4 h-4 text-text-muted" />
+                    <span className="text-sm font-medium text-text-secondary">{cat.label}</span>
                   </div>
-                  {!perm.is_builtin && (
-                    <button
-                      onClick={() => handleDeletePermission(perm.id)}
-                      className="text-text-tertiary hover:text-danger transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {catPerms.map(perm => (
+                      <div
+                        key={perm.id}
+                        className={`border rounded-xl p-4 transition-all hover:shadow-sm ${
+                          perm.is_builtin
+                            ? 'border-border-secondary bg-surface-2'
+                            : 'border-primary/20 bg-primary/5'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Shield className={`w-4 h-4 ${perm.is_builtin ? 'text-text-muted' : 'text-primary'}`} />
+                            <span className="text-sm font-semibold text-text-primary">{perm.name}</span>
+                            {perm.is_builtin && (
+                              <span className="px-1.5 py-0.5 rounded text-xs bg-surface-tertiary text-text-muted">内置</span>
+                            )}
+                          </div>
+                          {!perm.is_builtin && (
+                            <button
+                              onClick={() => handleDeletePermission(perm.id)}
+                              className="text-text-tertiary hover:text-danger transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+
+                        <p className="text-xs text-text-secondary mb-3">{perm.description}</p>
+
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                          {[
+                            { label: '联网', value: perm.allow_network },
+                            { label: '文件读写', value: perm.allow_filesystem },
+                            { label: '子进程', value: perm.allow_subprocess },
+                            { label: '环境变量', value: perm.allow_env_vars },
+                            { label: '终端', value: perm.allow_terminal },
+                          ].map(item => (
+                            <div key={item.label} className="flex items-center gap-1">
+                              {item.value
+                                ? <CheckCircle className="w-3 h-3 text-success" />
+                                : <XCircle className="w-3 h-3 text-text-muted/50" />
+                              }
+                              <span className={item.value ? 'text-text-secondary' : 'text-text-muted/50'}>{item.label}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex items-center gap-3 mt-2 text-xs text-text-muted">
+                          <span>超时 {perm.max_timeout}s</span>
+                          <span>内存 {perm.max_memory_mb}MB</span>
+                          <span>{perm.allowed_languages.join(', ')}</span>
+                        </div>
+
+                        {!perm.is_builtin && (
+                          <button
+                            onClick={() => { setEditingPerm(perm); setShowPermEditor(true) }}
+                            className="mt-3 text-xs text-primary hover:underline"
+                          >
+                            编辑
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
+              )
+            })
+          )}
+        </div>
+      )}
 
-                <p className="text-xs text-text-secondary mb-3">{perm.description}</p>
+      {/* ==================== 终端 Tab ==================== */}
+      {activeTab === 'terminal' && (
+        <div className="border border-border-secondary rounded-xl overflow-hidden">
+          {/* 终端标题栏 */}
+          <div className="flex items-center justify-between px-4 py-2 bg-surface-2 border-b border-border-tertiary">
+            <div className="flex items-center gap-2">
+              <Terminal className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium text-text-primary">终端</span>
+              {activeWorkspaceId && (
+                <span className="text-xs text-text-muted">
+                  工作空间: {activeWorkspaceId.slice(0, 8)}
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setTermInput('')}
+              className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
+            >
+              清空
+            </button>
+          </div>
 
-                <div className="grid grid-cols-2 gap-1.5 text-xs">
-                  {[
-                    { label: '联网', value: perm.allow_network },
-                    { label: '文件读写', value: perm.allow_filesystem },
-                    { label: '子进程', value: perm.allow_subprocess },
-                    { label: '环境变量', value: perm.allow_env_vars },
-                  ].map(item => (
-                    <div key={item.label} className="flex items-center gap-1.5">
-                      {item.value
-                        ? <CheckCircle className="w-3 h-3 text-success" />
-                        : <XCircle className="w-3 h-3 text-text-muted" />
-                      }
-                      <span className={item.value ? 'text-text-secondary' : 'text-text-muted'}>{item.label}</span>
+          {/* 终端输出 */}
+          <div className="bg-background p-4 min-h-[300px] max-h-[500px] overflow-y-auto font-mono text-xs">
+            {executions.filter(e => e.language === 'terminal').length === 0 && termHistory.length === 0 ? (
+              <div className="text-text-muted py-8 text-center font-sans">
+                在下方输入命令并按 Enter 执行
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {executions
+                  .filter(e => e.language === 'terminal')
+                  .map((exec, idx) => (
+                    <div key={exec.id || idx}>
+                      <div className="text-primary">
+                        <span className="text-text-muted">$ </span>
+                        <span>{exec.code.replace(/^\$ /, '')}</span>
+                      </div>
+                      {exec.stdout && (
+                        <pre className="text-text-secondary whitespace-pre-wrap mt-1 pl-4 border-l-2 border-border-tertiary">
+                          {exec.stdout}
+                        </pre>
+                      )}
+                      {exec.stderr && (
+                        <pre className="text-danger/80 whitespace-pre-wrap mt-1 pl-4 border-l-2 border-danger/30">
+                          {exec.stderr}
+                        </pre>
+                      )}
+                      <div className="text-text-muted text-xs mt-1">
+                        {exec.duration_ms}ms
+                        {!exec.success && <span className="text-danger ml-2">exit {exec.exit_code}</span>}
+                      </div>
                     </div>
                   ))}
-                </div>
-
-                <div className="flex items-center gap-3 mt-2 text-xs text-text-muted">
-                  <span>超时 {perm.max_timeout}s</span>
-                  <span>内存 {perm.max_memory_mb}MB</span>
-                  <span>语言: {perm.allowed_languages.join(', ')}</span>
-                </div>
-
-                {!perm.is_builtin && (
-                  <button
-                    onClick={() => { setEditingPerm(perm); setShowPermEditor(true) }}
-                    className="mt-3 text-xs text-primary hover:underline"
-                  >
-                    编辑
-                  </button>
+                {isTermRunning && (
+                  <div className="text-primary animate-pulse">
+                    <span className="text-text-muted">$ </span>
+                    {termInput} (执行中...)
+                  </div>
                 )}
               </div>
-            ))}
+            )}
+          </div>
+
+          {/* 终端输入 */}
+          <div className="px-4 py-3 bg-surface-2 border-t border-border-tertiary">
+            <div className="flex items-center gap-2 bg-background rounded-lg px-3 py-2 border border-border-tertiary focus-within:border-primary">
+              <span className="text-primary font-mono text-sm">$</span>
+              <input
+                value={termInput}
+                onChange={(e) => setTermInput(e.target.value)}
+                onKeyDown={handleTermKeyDown}
+                placeholder="输入命令..."
+                disabled={isTermRunning}
+                className="flex-1 bg-transparent font-mono text-sm text-text-primary outline-none disabled:opacity-50"
+                autoFocus
+              />
+            </div>
           </div>
         </div>
       )}

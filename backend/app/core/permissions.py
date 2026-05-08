@@ -17,6 +17,7 @@ class SandboxPermission:
     allow_filesystem: bool = True        # 能否读写文件
     allow_subprocess: bool = False       # 能否启动子进程
     allow_env_vars: bool = False         # 能否读取环境变量
+    allow_terminal: bool = False         # 能否使用终端命令
 
     # Python 模块控制
     allow_imports: list = field(default_factory=list)   # 白名单（空=全部允许）
@@ -56,7 +57,9 @@ class SandboxPermission:
 
         if not self.allow_env_vars:
             # 只保留基本环境变量
-            for key in ["PATH", "SystemRoot", "COMSPEC", "TEMP", "TMP", "HOME"]:
+            for key in ["PATH", "SystemRoot", "COMSPEC", "TEMP", "TMP", "HOME",
+                         "SystemDrive", "ProgramFiles", "ProgramFiles(x86)", "APPDATA",
+                         "USERPROFILE", "PUBLIC", "CommonProgramFiles", "CommonProgramFiles(x86)"]:
                 if key in _os.environ:
                     env[key] = _os.environ[key]
             env["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -68,6 +71,7 @@ class SandboxPermission:
 # ==================== 预置权限模板 ====================
 
 BUILTIN_PERMISSIONS = [
+    # ---- 基础模板 ----
     SandboxPermission(
         id="isolated",
         name="完全隔离",
@@ -76,6 +80,7 @@ BUILTIN_PERMISSIONS = [
         allow_filesystem=False,
         allow_subprocess=False,
         allow_env_vars=False,
+        allow_terminal=False,
         allow_imports=["math", "json", "re", "datetime", "collections", "itertools", "functools", "statistics", "string", "random", "decimal", "fractions", "typing", "dataclasses", "enum", "abc", "copy", "hashlib", "base64", "struct"],
         deny_imports=["os", "sys", "subprocess", "shutil", "pathlib", "socket", "http", "urllib", "requests", "ctypes", "importlib", "__builtins__"],
         max_timeout=10,
@@ -83,14 +88,17 @@ BUILTIN_PERMISSIONS = [
         allowed_languages=["python"],
         is_builtin=True,
     ),
+
+    # ---- 数据科学类 ----
     SandboxPermission(
         id="data-analysis",
         name="数据分析",
-        description="允许数据分析相关库（pandas/numpy/matplotlib），禁止网络和子进程",
+        description="允许数据分析库（pandas/numpy/matplotlib），禁止网络和子进程",
         allow_network=False,
         allow_filesystem=True,
         allow_subprocess=False,
         allow_env_vars=False,
+        allow_terminal=False,
         allow_imports=[],
         deny_imports=["subprocess", "shutil", "socket", "http", "urllib", "requests", "ctypes", "webbrowser", "antigravity"],
         max_timeout=30,
@@ -99,13 +107,66 @@ BUILTIN_PERMISSIONS = [
         is_builtin=True,
     ),
     SandboxPermission(
-        id="frontend-dev",
-        name="前端开发",
-        description="仅允许 JavaScript/TypeScript，可读写文件，适合前端工具链",
+        id="machine-learning",
+        name="机器学习",
+        description="允许 sklearn/torch/tensorflow 等机器学习库，可读文件，禁止网络",
         allow_network=False,
         allow_filesystem=True,
         allow_subprocess=False,
         allow_env_vars=False,
+        allow_terminal=False,
+        allow_imports=[],
+        deny_imports=["subprocess", "shutil", "socket", "http", "urllib", "requests", "ctypes", "webbrowser"],
+        max_timeout=120,
+        max_memory_mb=1024,
+        allowed_languages=["python"],
+        is_builtin=True,
+    ),
+
+    # ---- 网络类 ----
+    SandboxPermission(
+        id="web-request",
+        name="网络请求",
+        description="允许 HTTP 请求（requests/urllib），适合 API 调用和数据获取",
+        allow_network=True,
+        allow_filesystem=True,
+        allow_subprocess=False,
+        allow_env_vars=False,
+        allow_terminal=False,
+        allow_imports=[],
+        deny_imports=["subprocess", "shutil", "ctypes", "webbrowser"],
+        max_timeout=30,
+        max_memory_mb=256,
+        allowed_languages=["python", "javascript"],
+        is_builtin=True,
+    ),
+    SandboxPermission(
+        id="web-scraping",
+        name="网页爬虫",
+        description="网络 + 文件读写 + HTML 解析（bs4/lxml），适合爬虫和数据采集",
+        allow_network=True,
+        allow_filesystem=True,
+        allow_subprocess=False,
+        allow_env_vars=False,
+        allow_terminal=False,
+        allow_imports=[],
+        deny_imports=["subprocess", "shutil", "ctypes", "webbrowser"],
+        max_timeout=60,
+        max_memory_mb=512,
+        allowed_languages=["python"],
+        is_builtin=True,
+    ),
+
+    # ---- 开发工具类 ----
+    SandboxPermission(
+        id="frontend-dev",
+        name="前端开发",
+        description="JavaScript/TypeScript，可读写文件，适合前端工具链",
+        allow_network=False,
+        allow_filesystem=True,
+        allow_subprocess=False,
+        allow_env_vars=False,
+        allow_terminal=False,
         allow_imports=[],
         deny_imports=[],
         max_timeout=30,
@@ -114,6 +175,40 @@ BUILTIN_PERMISSIONS = [
         is_builtin=True,
     ),
     SandboxPermission(
+        id="terminal",
+        name="终端命令",
+        description="可执行系统命令（subprocess/shutil），拥有文件系统和终端访问权限",
+        allow_network=False,
+        allow_filesystem=True,
+        allow_subprocess=True,
+        allow_env_vars=True,
+        allow_terminal=True,
+        allow_imports=[],
+        deny_imports=["ctypes"],
+        max_timeout=60,
+        max_memory_mb=512,
+        allowed_languages=["python", "javascript"],
+        is_builtin=True,
+    ),
+    SandboxPermission(
+        id="dev-tools",
+        name="开发工具箱",
+        description="终端 + 网络 + 文件系统，适合开发调试，禁止 ctypes",
+        allow_network=True,
+        allow_filesystem=True,
+        allow_subprocess=True,
+        allow_env_vars=True,
+        allow_terminal=True,
+        allow_imports=[],
+        deny_imports=["ctypes"],
+        max_timeout=60,
+        max_memory_mb=512,
+        allowed_languages=["python", "javascript", "typescript"],
+        is_builtin=True,
+    ),
+
+    # ---- 全能类 ----
+    SandboxPermission(
         id="full-access",
         name="完全访问",
         description="不限制任何能力，仅建议用于受信任的 Agent",
@@ -121,6 +216,7 @@ BUILTIN_PERMISSIONS = [
         allow_filesystem=True,
         allow_subprocess=True,
         allow_env_vars=True,
+        allow_terminal=True,
         allow_imports=[],
         deny_imports=[],
         max_timeout=60,

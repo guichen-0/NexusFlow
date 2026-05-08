@@ -6,6 +6,7 @@ export interface Permission {
   allow_filesystem: boolean
   allow_subprocess: boolean
   allow_env_vars: boolean
+  allow_terminal: boolean
   allow_imports: string[]
   deny_imports: string[]
   max_timeout: number
@@ -54,7 +55,7 @@ export interface ExecuteResult {
   permission_name?: string | null
 }
 
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+export const API_BASE = import.meta.env.VITE_API_URL || '/api/backend/v1/sandbox'
 
 export async function apiExecute(params: {
   code: string
@@ -63,7 +64,7 @@ export async function apiExecute(params: {
   workspace_id?: string
   permission_id?: string
 }): Promise<ExecuteResult> {
-  const res = await fetch(`${API_BASE}/api/v1/sandbox/execute`, {
+  const res = await fetch(`${API_BASE}/execute`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -75,8 +76,26 @@ export async function apiExecute(params: {
   return res.json()
 }
 
+export async function apiExecuteTerminal(params: {
+  command: string
+  workspace_id?: string
+  permission_id?: string
+  timeout?: number
+}): Promise<ExecuteResult> {
+  const res = await fetch(`${API_BASE}/terminal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || '终端执行失败')
+  }
+  return res.json()
+}
+
 export async function apiCreateWorkspace(permissionId?: string): Promise<{ workspace_id: string; path: string; permission_id?: string; created_at?: string }> {
-  const res = await fetch(`${API_BASE}/api/v1/sandbox/workspace`, {
+  const res = await fetch(`${API_BASE}/workspace`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: permissionId ? JSON.stringify({ permission_id: permissionId }) : undefined,
@@ -87,18 +106,18 @@ export async function apiCreateWorkspace(permissionId?: string): Promise<{ works
 }
 
 export async function apiGetWorkspace(id: string): Promise<Workspace> {
-  const res = await fetch(`${API_BASE}/api/v1/sandbox/workspace/${id}`)
+  const res = await fetch(`${API_BASE}/workspace/${id}`)
   if (!res.ok) throw new Error('获取工作空间失败')
   return res.json()
 }
 
 export async function apiDeleteWorkspace(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/v1/sandbox/workspace/${id}`, { method: 'DELETE' })
+  const res = await fetch(`${API_BASE}/workspace/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('删除工作空间失败')
 }
 
 export async function apiWriteFile(workspaceId: string, path: string, content: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/v1/sandbox/workspace/file/write`, {
+  const res = await fetch(`${API_BASE}/workspace/file/write`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspace_id: workspaceId, path, content }),
@@ -107,7 +126,7 @@ export async function apiWriteFile(workspaceId: string, path: string, content: s
 }
 
 export async function apiReadFile(workspaceId: string, path: string): Promise<{ path: string; content: string }> {
-  const res = await fetch(`${API_BASE}/api/v1/sandbox/workspace/file/read`, {
+  const res = await fetch(`${API_BASE}/workspace/file/read`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ workspace_id: workspaceId, path }),
@@ -118,28 +137,28 @@ export async function apiReadFile(workspaceId: string, path: string): Promise<{ 
 
 export async function apiDeleteFile(workspaceId: string, path: string): Promise<void> {
   const res = await fetch(
-    `${API_BASE}/api/v1/sandbox/workspace/file/delete?workspace_id=${workspaceId}&path=${encodeURIComponent(path)}`,
+    `${API_BASE}/workspace/file/delete?workspace_id=${workspaceId}&path=${encodeURIComponent(path)}`,
     { method: 'DELETE' }
   )
   if (!res.ok) throw new Error('删除文件失败')
 }
 
 export async function apiGetExecutions(limit = 50): Promise<ExecutionRecord[]> {
-  const res = await fetch(`${API_BASE}/api/v1/sandbox/executions?limit=${limit}`)
+  const res = await fetch(`${API_BASE}/executions?limit=${limit}`)
   if (!res.ok) throw new Error('获取执行历史失败')
   const data = await res.json()
   return data.executions
 }
 
 export async function apiGetPermissions(): Promise<Permission[]> {
-  const res = await fetch(`${API_BASE}/api/v1/sandbox/permissions`)
+  const res = await fetch(`${API_BASE}/permissions`)
   if (!res.ok) throw new Error('获取权限列表失败')
   const data = await res.json()
   return data.permissions
 }
 
 export async function apiCreatePermission(params: Partial<Permission>): Promise<Permission> {
-  const res = await fetch(`${API_BASE}/api/v1/sandbox/permissions`, {
+  const res = await fetch(`${API_BASE}/permissions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
@@ -150,6 +169,6 @@ export async function apiCreatePermission(params: Partial<Permission>): Promise<
 }
 
 export async function apiDeletePermission(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/v1/sandbox/permissions/${id}`, { method: 'DELETE' })
+  const res = await fetch(`${API_BASE}/permissions/${id}`, { method: 'DELETE' })
   if (!res.ok) throw new Error('删除权限失败')
 }

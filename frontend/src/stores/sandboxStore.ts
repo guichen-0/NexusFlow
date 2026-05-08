@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import type { Workspace, ExecutionRecord, Permission } from '../types/sandbox'
 import {
   apiCreateWorkspace, apiDeleteWorkspace, apiGetWorkspace,
-  apiExecute, apiGetExecutions, apiGetPermissions,
+  apiExecute, apiExecuteTerminal, apiGetExecutions, apiGetPermissions,
   apiWriteFile, apiReadFile, apiDeleteFile,
 } from '../types/sandbox'
 
@@ -15,15 +15,18 @@ interface SandboxState {
   panelOpen: boolean
   isExecuting: boolean
   lastResult: ExecutionRecord | null
+  activeTab: 'code' | 'terminal'  // 沙箱面板内部 tab
 
   // Actions
   togglePanel: () => void
   setPanelOpen: (open: boolean) => void
+  setActiveTab: (tab: 'code' | 'terminal') => void
   setActiveWorkspace: (id: string | null) => void
   createWorkspace: (permissionId?: string) => Promise<Workspace>
   deleteWorkspace: (id: string) => Promise<void>
   refreshWorkspace: (id: string) => Promise<void>
   executeCode: (code: string, language: string, opts?: { workspaceId?: string; permissionId?: string; timeout?: number }) => Promise<ExecutionRecord>
+  executeTerminal: (command: string, opts?: { workspaceId?: string; permissionId?: string; timeout?: number }) => Promise<ExecutionRecord>
   fetchExecutions: () => Promise<void>
   fetchPermissions: () => Promise<void>
   writeFile: (workspaceId: string, path: string, content: string) => Promise<void>
@@ -41,9 +44,11 @@ export const useSandboxStore = create<SandboxState>()(
       panelOpen: false,
       isExecuting: false,
       lastResult: null,
+      activeTab: 'code',
 
       togglePanel: () => set(s => ({ panelOpen: !s.panelOpen })),
       setPanelOpen: (open) => set({ panelOpen: open }),
+      setActiveTab: (tab) => set({ activeTab: tab }),
 
       setActiveWorkspace: (id) => set({ activeWorkspaceId: id }),
 
@@ -63,6 +68,8 @@ export const useSandboxStore = create<SandboxState>()(
           workspaces: [...s.workspaces, ws],
           activeWorkspaceId: ws.id,
         }))
+        // 刷新一次以获取完整信息
+        get().refreshWorkspace(ws.id).catch(() => {})
         return ws
       },
 
@@ -126,6 +133,42 @@ export const useSandboxStore = create<SandboxState>()(
           if (wsId) {
             get().refreshWorkspace(wsId).catch(() => {})
           }
+          return record
+        } catch (err: any) {
+          set({ isExecuting: false })
+          throw err
+        }
+      },
+
+      executeTerminal: async (command, opts = {}) => {
+        set({ isExecuting: true })
+        try {
+          const result = await apiExecuteTerminal({
+            command,
+            workspace_id: opts.workspaceId || get().activeWorkspaceId || undefined,
+            permission_id: opts.permissionId,
+            timeout: opts.timeout,
+          })
+          const record: ExecutionRecord = {
+            id: String(Date.now()),
+            code: `$ ${command}`,
+            language: 'terminal',
+            permission_id: result.permission_id || null,
+            permission_name: result.permission_name || null,
+            workspace_id: opts.workspaceId || get().activeWorkspaceId || null,
+            exit_code: result.exit_code,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            duration_ms: result.duration_ms,
+            timed_out: result.timed_out,
+            success: result.success,
+            executed_at: new Date().toISOString(),
+          }
+          set(s => ({
+            executions: [record, ...s.executions].slice(0, 100),
+            lastResult: record,
+            isExecuting: false,
+          }))
           return record
         } catch (err: any) {
           set({ isExecuting: false })

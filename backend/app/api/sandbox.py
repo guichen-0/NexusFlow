@@ -28,6 +28,13 @@ class ExecuteRequest(BaseModel):
     permission_id: Optional[str] = None  # 权限模板 ID
 
 
+class TerminalRequest(BaseModel):
+    command: str
+    workspace_id: Optional[str] = None
+    permission_id: Optional[str] = None
+    timeout: Optional[int] = None
+
+
 class FileWriteRequest(BaseModel):
     workspace_id: str
     path: str
@@ -261,3 +268,149 @@ async def get_supported_languages():
             {"id": "typescript", "name": "TypeScript", "version": "5.x (transpiled)"},
         ]
     }
+
+
+@router.post("/terminal")
+async def execute_terminal(request: TerminalRequest):
+    """在终端中执行系统命令（受权限控制）"""
+    import asyncio
+    import sys
+    import platform
+
+    if not request.command.strip():
+        raise HTTPException(status_code=400, detail="命令不能为空")
+
+    if len(request.command) > 10_000:
+        raise HTTPException(status_code=400, detail="命令过长（最大 10KB）")
+
+    # 检查权限是否允许终端
+    perm_id = request.permission_id
+    if request.workspace_id:
+        perm_id = perm_id or _workspace_permissions.get(request.workspace_id)
+
+    perm = get_permission(perm_id) if perm_id else None
+
+    allow_terminal = True  # 无权限时默认允许（向后兼容）
+    if perm is not None:
+        allow_terminal = getattr(perm, "allow_terminal", False)
+        if not allow_terminal:
+            raise HTTPException(
+                status_code=403,
+                detail=f"当前权限模板 '{perm.name}' 不允许使用终端。请切换到支持终端的权限模板。"
+            )
+        # 权限超时覆盖
+        perm_timeout = getattr(perm, "max_timeout", None)
+        if perm_timeout:
+            request.timeout = perm_timeout
+
+    timeout = request.timeout or 30
+
+    # 工作目录
+    cwd = None
+    if request.workspace_id:
+        workspace = os.path.join(sandbox.WORKSPACE_BASE, f"ws-{request.workspace_id}")
+        if not os.path.exists(workspace):
+            raise HTTPException(status_code=404, detail="工作空间不存在")
+        cwd = workspace
+
+    # 根据平台选择 shell
+    if platform.system() == "Windows":
+        shell_cmd = ["cmd", "/c", request.command]
+    else:
+        shell_cmd = ["/bin/sh", "-c", request.command]
+
+    # 环境变量
+    exec_env = {**os.environ}
+    if perm is not None and hasattr(perm, "get_effective_env"):
+        exec_env = perm.get_effective_env()
+
+    start = datetime.now()
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *shell_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.DEVNULL,
+            cwd=cwd,
+            env=exec_env,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=timeout
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+            duration = (datetime.now() - start).total_seconds() * 1000
+            result = {
+                "exit_code": -1,
+                "stdout": "",
+                "stderr": f"命令执行超时（{timeout}秒）",
+                "duration_ms": int(duration),
+                "timed_out": True,
+                "success": False,
+                "permission_id": perm_id,
+                "permission_name": perm.name if perm else None,
+            }
+            _execution_history.append({
+                "id": str(uuid.uuid4())[:8],
+                "code": f"$ {request.command}",
+                "language": "terminal",
+                "permission_id": perm_id,
+                "permission_name": perm.name if perm else None,
+                "workspace_id": request.workspace_id,
+                **result,
+                "executed_at": datetime.now().isoformat(),
+            })
+            return result
+
+        duration = (datetime.now() - start).total_seconds() * 1000
+        stdout_str = stdout.decode("utf-8", errors="replace")[:sandbox.MAX_OUTPUT_SIZE]
+        stderr_str = stderr.decode("utf-8", errors="replace")[:sandbox.MAX_OUTPUT_SIZE]
+        success = proc.returncode == 0
+
+        result = {
+            "exit_code": proc.returncode or 0,
+            "stdout": stdout_str,
+            "stderr": stderr_str,
+            "duration_ms": int(duration),
+            "timed_out": False,
+            "success": success,
+            "permission_id": perm_id,
+            "permission_name": perm.name if perm else None,
+        }
+
+        # 记录执行历史
+        _execution_history.append({
+            "id": str(uuid.uuid4())[:8],
+            "code": f"$ {request.command}",
+            "language": "terminal",
+            "permission_id": perm_id,
+            "permission_name": perm.name if perm else None,
+            "workspace_id": request.workspace_id,
+            **result,
+            "executed_at": datetime.now().isoformat(),
+        })
+
+        return result
+
+    except Exception as e:
+        duration = (datetime.now() - start).total_seconds() * 1000
+        result = {
+            "exit_code": 1,
+            "stdout": "",
+            "stderr": f"执行错误: {str(e)}",
+            "duration_ms": int(duration),
+            "timed_out": False,
+            "success": False,
+            "permission_id": perm_id,
+            "permission_name": perm.name if perm else None,
+        }
+        _execution_history.append({
+            "id": str(uuid.uuid4())[:8],
+            "code": f"$ {request.command}",
+            "language": "terminal",
+            **result,
+            "executed_at": datetime.now().isoformat(),
+        })
+        return result

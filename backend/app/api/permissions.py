@@ -18,6 +18,7 @@ class PermissionCreate(BaseModel):
     allow_filesystem: bool = True
     allow_subprocess: bool = False
     allow_env_vars: bool = False
+    allow_terminal: bool = False
     allow_imports: List[str] = []
     deny_imports: List[str] = []
     max_timeout: int = 30
@@ -33,6 +34,7 @@ class PermissionUpdate(BaseModel):
     allow_filesystem: Optional[bool] = None
     allow_subprocess: Optional[bool] = None
     allow_env_vars: Optional[bool] = None
+    allow_terminal: Optional[bool] = None
     allow_imports: Optional[List[str]] = None
     deny_imports: Optional[List[str]] = None
     max_timeout: Optional[int] = None
@@ -67,6 +69,7 @@ async def create_permission(data: PermissionCreate):
         allow_filesystem=data.allow_filesystem,
         allow_subprocess=data.allow_subprocess,
         allow_env_vars=data.allow_env_vars,
+        allow_terminal=data.allow_terminal,
         allow_imports=data.allow_imports,
         deny_imports=data.deny_imports,
         max_timeout=data.max_timeout,

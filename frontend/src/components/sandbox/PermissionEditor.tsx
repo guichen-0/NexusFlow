@@ -14,6 +14,7 @@ export default function PermissionEditor({ permission, onSave, onCancel }: Permi
   const [allowFilesystem, setAllowFilesystem] = useState(permission?.allow_filesystem ?? true)
   const [allowSubprocess, setAllowSubprocess] = useState(permission?.allow_subprocess ?? false)
   const [allowEnvVars, setAllowEnvVars] = useState(permission?.allow_env_vars ?? false)
+  const [allowTerminal, setAllowTerminal] = useState(permission?.allow_terminal ?? false)
   const [maxTimeout, setMaxTimeout] = useState(permission?.max_timeout ?? 30)
   const [maxMemoryMb, setMaxMemoryMb] = useState(permission?.max_memory_mb ?? 512)
   const [allowImports, setAllowImports] = useState(permission?.allow_imports?.join(', ') || '')
@@ -35,6 +36,7 @@ export default function PermissionEditor({ permission, onSave, onCancel }: Permi
       allow_filesystem: allowFilesystem,
       allow_subprocess: allowSubprocess,
       allow_env_vars: allowEnvVars,
+      allow_terminal: allowTerminal,
       max_timeout: maxTimeout,
       max_memory_mb: maxMemoryMb,
       allow_imports: allowImports.split(',').map(s => s.trim()).filter(Boolean),
@@ -97,6 +99,7 @@ export default function PermissionEditor({ permission, onSave, onCancel }: Permi
               <ToggleSwitch value={allowNetwork} onChange={setAllowNetwork} label="允许联网" />
               <ToggleSwitch value={allowFilesystem} onChange={setAllowFilesystem} label="允许文件读写" />
               <ToggleSwitch value={allowSubprocess} onChange={setAllowSubprocess} label="允许子进程" />
+              <ToggleSwitch value={allowTerminal} onChange={setAllowTerminal} label="允许终端命令" />
               <ToggleSwitch value={allowEnvVars} onChange={setAllowEnvVars} label="允许读取环境变量" />
             </div>
           </div>
