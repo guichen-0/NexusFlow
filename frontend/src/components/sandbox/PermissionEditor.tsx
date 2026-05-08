@@ -3,11 +3,12 @@ import type { Permission } from '../../types/sandbox'
 
 interface PermissionEditorProps {
   permission?: Permission | null
+  isCopyFromBuiltin?: boolean
   onSave: (data: Partial<Permission>) => void
   onCancel: () => void
 }
 
-export default function PermissionEditor({ permission, onSave, onCancel }: PermissionEditorProps) {
+export default function PermissionEditor({ permission, isCopyFromBuiltin = false, onSave, onCancel }: PermissionEditorProps) {
   const [name, setName] = useState(permission?.name || '')
   const [description, setDescription] = useState(permission?.description || '')
   const [allowNetwork, setAllowNetwork] = useState(permission?.allow_network ?? false)
@@ -29,7 +30,7 @@ export default function PermissionEditor({ permission, onSave, onCancel }: Permi
 
   const handleSave = () => {
     if (!name.trim()) return
-    onSave({
+    const data: Record<string, any> = {
       name: name.trim(),
       description: description.trim(),
       allow_network: allowNetwork,
@@ -39,10 +40,19 @@ export default function PermissionEditor({ permission, onSave, onCancel }: Permi
       allow_terminal: allowTerminal,
       max_timeout: maxTimeout,
       max_memory_mb: maxMemoryMb,
+      max_output_size: 1000000,
       allow_imports: allowImports.split(',').map(s => s.trim()).filter(Boolean),
       deny_imports: denyImports.split(',').map(s => s.trim()).filter(Boolean),
       allowed_languages: allowedLangs,
-    })
+    }
+    // 新建时不传 id 和 is_builtin，让后端自动处理
+    if (isEditing && !isCopyFromBuiltin) {
+      onSave(data)
+    } else {
+      delete (data as any).is_builtin
+      delete (data as any).id
+      onSave(data)
+    }
   }
 
   const ToggleSwitch = ({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label: string }) => (
@@ -61,13 +71,19 @@ export default function PermissionEditor({ permission, onSave, onCancel }: Permi
     </div>
   )
 
+  const isEditing = !!permission
+  const title = isCopyFromBuiltin
+    ? `基于「${permission?.name}」创建副本`
+    : isEditing ? '编辑权限模板' : '新建权限模板'
+
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-surface-1 border border-border-secondary rounded-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto">
         <div className="px-5 py-4 border-b border-border-secondary">
-          <h3 className="text-base font-semibold text-text-primary">
-            {permission ? '编辑权限模板' : '新建权限模板'}
-          </h3>
+          <h3 className="text-base font-semibold text-text-primary">{title}</h3>
+          {isCopyFromBuiltin && (
+            <p className="text-xs text-text-muted mt-1">将基于内置模板创建一个可自由编辑的自定义副本</p>
+          )}
         </div>
 
         <div className="px-5 py-4 space-y-4">
@@ -183,7 +199,7 @@ export default function PermissionEditor({ permission, onSave, onCancel }: Permi
             disabled={!name.trim()}
             className="px-4 py-2 rounded-lg text-sm bg-primary text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
           >
-            {permission ? '保存' : '创建'}
+            {isCopyFromBuiltin ? '创建副本' : isEditing ? '保存' : '创建'}
           </button>
         </div>
       </div>

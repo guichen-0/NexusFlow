@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
+import uuid
 
 from app.core.permissions import (
     list_permissions, get_permission, save_permission,
@@ -84,14 +85,40 @@ async def create_permission(data: PermissionCreate):
 
 @router.put("/permissions/{permission_id}")
 async def update_permission(permission_id: str, data: PermissionUpdate):
-    """更新权限模板"""
+    """更新权限模板（内置模板编辑时自动创建副本）"""
     existing = get_permission(permission_id)
     if not existing:
         raise HTTPException(status_code=404, detail="权限模板不存在")
-    if existing.is_builtin:
-        raise HTTPException(status_code=400, detail="不能修改内置权限模板")
 
     updates = data.model_dump(exclude_none=True)
+
+    if existing.is_builtin:
+        # 基于内置模板创建副本
+        copy_perm = SandboxPermission(
+            id=f"custom-{uuid.uuid4().hex[:8]}",
+            name=updates.get("name", f"{existing.name} (自定义)"),
+            description=updates.get("description", existing.description),
+            allow_network=updates.get("allow_network", existing.allow_network),
+            allow_filesystem=updates.get("allow_filesystem", existing.allow_filesystem),
+            allow_subprocess=updates.get("allow_subprocess", existing.allow_subprocess),
+            allow_env_vars=updates.get("allow_env_vars", existing.allow_env_vars),
+            allow_terminal=updates.get("allow_terminal", existing.allow_terminal),
+            allow_imports=updates.get("allow_imports", existing.allow_imports),
+            deny_imports=updates.get("deny_imports", existing.deny_imports),
+            max_timeout=updates.get("max_timeout", existing.max_timeout),
+            max_memory_mb=updates.get("max_memory_mb", existing.max_memory_mb),
+            max_output_size=updates.get("max_output_size", existing.max_output_size),
+            allowed_languages=updates.get("allowed_languages", existing.allowed_languages),
+            is_builtin=False,
+        )
+        saved = save_permission(copy_perm)
+        return {
+            "message": f"已基于内置模板「{existing.name}」创建自定义副本",
+            "permission": saved.to_dict(),
+            "copied_from": permission_id,
+        }
+
+    # 非内置：直接修改
     for key, value in updates.items():
         setattr(existing, key, value)
 

@@ -79,7 +79,7 @@ export default function SandboxPanel() {
   const handleCreateWorkspace = async () => {
     setError('')
     try {
-      await createWorkspace(selectedPerm || undefined)
+      await createWorkspace({ permissionId: selectedPerm || undefined, type: 'virtual' })
     } catch (e: any) {
       setError(e.message)
     }
@@ -90,7 +90,7 @@ export default function SandboxPanel() {
     if (!code.trim()) return
     try {
       if (!activeWorkspaceId) {
-        await createWorkspace(selectedPerm || undefined)
+        await createWorkspace({ permissionId: selectedPerm || undefined, type: 'virtual' })
       }
       await executeCode(code, language, { permissionId: selectedPerm || undefined })
     } catch (e: any) {
@@ -107,7 +107,7 @@ export default function SandboxPanel() {
     setTermInput('')
     try {
       if (!activeWorkspaceId) {
-        await createWorkspace(selectedPerm || undefined)
+        await createWorkspace({ permissionId: selectedPerm || undefined, type: 'virtual' })
       }
       await executeTerminal(cmd, { permissionId: selectedPerm || undefined })
     } catch (e: any) {
@@ -280,7 +280,10 @@ export default function SandboxPanel() {
             <option value="">选择工作空间...</option>
             {workspaces.map(ws => (
               <option key={ws.id} value={ws.id}>
-                {ws.id.slice(0, 8)} ({ws.file_count} 文件)
+                {ws.type === 'local'
+                  ? `${ws.path.split(/[/\\]/).pop() || ws.path} (本地)`
+                  : `${ws.id.slice(0, 8)} (虚拟)`
+                } — {ws.file_count} 文件
               </option>
             ))}
           </select>

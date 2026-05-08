@@ -19,6 +19,7 @@ export interface Permission {
 export interface Workspace {
   id: string
   path: string
+  type: 'virtual' | 'local'  // virtual=临时目录, local=用户选择的本地文件夹
   file_count: number
   files: string[]
   total_size: number
@@ -55,7 +56,7 @@ export interface ExecuteResult {
   permission_name?: string | null
 }
 
-export const API_BASE = import.meta.env.VITE_API_URL || '/api/backend/v1/sandbox'
+export const API_BASE = import.meta.env.VITE_API_URL || '/api/v1/sandbox'
 
 export async function apiExecute(params: {
   code: string
@@ -94,13 +95,21 @@ export async function apiExecuteTerminal(params: {
   return res.json()
 }
 
-export async function apiCreateWorkspace(permissionId?: string): Promise<{ workspace_id: string; path: string; permission_id?: string; created_at?: string }> {
+export async function apiCreateWorkspace(opts?: { permissionId?: string; type?: 'virtual' | 'local'; path?: string }): Promise<{ workspace_id: string; path: string; type: string; permission_id?: string; created_at?: string }> {
+  const body = opts ? {
+    type: opts.type || 'virtual',
+    path: opts.path,
+    permission_id: opts.permissionId,
+  } : undefined
   const res = await fetch(`${API_BASE}/workspace`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: permissionId ? JSON.stringify({ permission_id: permissionId }) : undefined,
+    body: body ? JSON.stringify(body) : undefined,
   })
-  if (!res.ok) throw new Error('创建工作空间失败')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || '创建工作空间失败')
+  }
   const data = await res.json()
   return data
 }
@@ -111,9 +120,16 @@ export async function apiGetWorkspace(id: string): Promise<Workspace> {
   return res.json()
 }
 
-export async function apiDeleteWorkspace(id: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/workspace/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error('删除工作空间失败')
+export async function apiDeleteWorkspace(id: string, path?: string): Promise<void> {
+  let url = `${API_BASE}/workspace/${id}`
+  if (path) {
+    url += `?path=${encodeURIComponent(path)}`
+  }
+  const res = await fetch(url, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `删除失败 (${res.status})` }))
+    throw new Error(err.detail || `删除失败 (${res.status})`)
+  }
 }
 
 export async function apiWriteFile(workspaceId: string, path: string, content: string): Promise<void> {
@@ -163,12 +179,55 @@ export async function apiCreatePermission(params: Partial<Permission>): Promise<
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(params),
   })
-  if (!res.ok) throw new Error('创建权限失败')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || `创建权限失败 (${res.status})`)
+  }
   const data = await res.json()
   return data.permission
 }
 
+export async function apiUpdatePermission(id: string, data: Partial<Permission>): Promise<{ permission: Permission; copied_from?: string }> {
+  const res = await fetch(`${API_BASE}/permissions/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || '更新权限失败')
+  }
+  return res.json()
+}
+
 export async function apiDeletePermission(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/permissions/${id}`, { method: 'DELETE' })
-  if (!res.ok) throw new Error('删除权限失败')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || `删除权限失败 (${res.status})`)
+  }
+}
+
+export interface BrowseEntry {
+  name: string
+  path: string
+  is_dir: boolean
+  size: number
+  error?: string
+}
+
+export interface BrowseResult {
+  path: string
+  parent: string | null
+  entries: BrowseEntry[]
+}
+
+export async function apiBrowseDirectory(path?: string): Promise<BrowseResult> {
+  const params = path ? `?path=${encodeURIComponent(path)}` : ''
+  const res = await fetch(`${API_BASE}/browse${params}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || '浏览目录失败')
+  }
+  return res.json()
 }

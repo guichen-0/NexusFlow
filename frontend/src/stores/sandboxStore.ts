@@ -22,7 +22,7 @@ interface SandboxState {
   setPanelOpen: (open: boolean) => void
   setActiveTab: (tab: 'code' | 'terminal') => void
   setActiveWorkspace: (id: string | null) => void
-  createWorkspace: (permissionId?: string) => Promise<Workspace>
+  createWorkspace: (opts?: { permissionId?: string; type?: 'virtual' | 'local'; path?: string }) => Promise<Workspace>
   deleteWorkspace: (id: string) => Promise<void>
   refreshWorkspace: (id: string) => Promise<void>
   executeCode: (code: string, language: string, opts?: { workspaceId?: string; permissionId?: string; timeout?: number }) => Promise<ExecutionRecord>
@@ -52,11 +52,12 @@ export const useSandboxStore = create<SandboxState>()(
 
       setActiveWorkspace: (id) => set({ activeWorkspaceId: id }),
 
-      createWorkspace: async (permissionId) => {
-        const data = await apiCreateWorkspace(permissionId)
+      createWorkspace: async (opts) => {
+        const data = await apiCreateWorkspace(opts)
         const ws: Workspace = {
           id: data.workspace_id,
           path: data.path,
+          type: (data.type as 'virtual' | 'local') || 'virtual',
           file_count: 0,
           files: [],
           total_size: 0,
@@ -74,7 +75,8 @@ export const useSandboxStore = create<SandboxState>()(
       },
 
       deleteWorkspace: async (id) => {
-        await apiDeleteWorkspace(id)
+        const ws = get().workspaces.find(w => w.id === id)
+        await apiDeleteWorkspace(id, ws?.path)
         set(s => ({
           workspaces: s.workspaces.filter(w => w.id !== id),
           activeWorkspaceId: s.activeWorkspaceId === id ? null : s.activeWorkspaceId,
@@ -86,6 +88,7 @@ export const useSandboxStore = create<SandboxState>()(
         const ws: Workspace = {
           id,
           path: info.path,
+          type: (info.type as 'virtual' | 'local') || 'virtual',
           file_count: info.file_count,
           files: info.files || [],
           total_size: info.total_size || 0,

@@ -1,5 +1,7 @@
-"""沙箱 API — 代码执行和文件管理"""
-from fastapi import APIRouter, HTTPException, Query
+import os
+
+content = r'''"""沙箱 API — 代码执行和文件管理"""
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 import os
@@ -27,7 +29,7 @@ def _ensure_data_dir():
 
 
 def _load_local_workspaces():
-    """从磁盘加载本地工作空间注册表，失败时返回空 dict"""
+    """从磁盘加载本地工作空间注册表"""
     try:
         if os.path.exists(_LOCAL_WORKSPACES_FILE):
             with open(_LOCAL_WORKSPACES_FILE, "r", encoding="utf-8") as f:
@@ -46,12 +48,12 @@ def _save_local_workspaces(data):
 
 def _load_workspace_permissions():
     """从磁盘加载工作空间权限绑定"""
-    if os.path.exists(_WORKSPACE_PERMISSIONS_FILE):
-        try:
+    try:
+        if os.path.exists(_WORKSPACE_PERMISSIONS_FILE):
             with open(_WORKSPACE_PERMISSIONS_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception:
-            pass
+    except Exception:
+        pass
     return {}
 
 
@@ -105,11 +107,6 @@ class CreateWorkspaceRequest(BaseModel):
     permission_id: Optional[str] = None
 
 
-class MountLocalFolderRequest(BaseModel):
-    path: str
-    permission_id: Optional[str] = None
-
-
 @router.post("/execute")
 async def execute_code(request: ExecuteRequest):
     """执行代码（支持权限控制）"""
@@ -126,7 +123,6 @@ async def execute_code(request: ExecuteRequest):
     if len(request.code) > 100_000:
         raise HTTPException(status_code=400, detail="代码过长（最大 100KB）")
 
-    # 获取工作空间
     workspace = None
     workspace_id = request.workspace_id
     if workspace_id:
@@ -139,7 +135,6 @@ async def execute_code(request: ExecuteRequest):
         if not os.path.exists(workspace):
             raise HTTPException(status_code=404, detail="工作空间不存在")
 
-    # 解析权限
     perm_id = request.permission_id
     if not perm_id and workspace_id:
         perm_id = _workspace_permissions.get(workspace_id)
@@ -206,8 +201,7 @@ async def create_workspace(request: CreateWorkspaceRequest = None):
             raise HTTPException(status_code=400, detail=f"目录不存在: {local_path}")
         if not os.path.isdir(local_path):
             raise HTTPException(status_code=400, detail=f"路径不是目录: {local_path}")
-        norm_path = os.path.normpath(local_path)
-        ws_path = norm_path
+        ws_path = os.path.normpath(local_path)
     else:
         ws_path = sandbox.create_workspace()
 
@@ -265,26 +259,12 @@ async def get_workspace(workspace_id: str):
 
 
 @router.delete("/workspace/{workspace_id}")
-async def delete_workspace(workspace_id: str, path: str = Query(default=None)):
-    """删除工作空间（虚拟空间删除目录，本地空间只解除绑定）
-
-    path 参数用于恢复本地工作空间：当 workspace_id 未在注册表中找到时，
-    如果提供了 path，则按本地工作空间处理（解决多进程数据丢失问题）。
-    """
+async def delete_workspace(workspace_id: str):
+    """删除工作空间（虚拟空间删除目录，本地空间只解除绑定）"""
     _local_workspaces.update(_load_local_workspaces())
     local_info = _local_workspaces.get(workspace_id)
-
-    # 注册表中未找到，但前端提供了 path → 按本地工作空间恢复处理
-    if not local_info and path:
-        # 路径合法性检查：必须是绝对路径且不以 .. 结尾
-        if not os.path.isabs(path):
-            raise HTTPException(status_code=400, detail="path 必须是绝对路径")
-        # 即使物理目录已被删除，也允许解绑（清理残留注册信息）
-        local_info = {"path": path, "type": "local"}
-
     if local_info:
-        # 本地工作空间：从注册表移除（不删除物理目录）
-        _local_workspaces.pop(workspace_id, None)
+        del _local_workspaces[workspace_id]
         _save_local_workspaces(_local_workspaces)
         _workspace_permissions.pop(workspace_id, None)
         _save_workspace_permissions(_workspace_permissions)
@@ -416,7 +396,6 @@ async def execute_terminal(request: TerminalRequest):
     if len(request.command) > 10_000:
         raise HTTPException(status_code=400, detail="命令过长（最大 10KB）")
 
-    # 检查权限是否允许终端
     perm_id = request.permission_id
     if request.workspace_id:
         perm_id = perm_id or _workspace_permissions.get(request.workspace_id)
@@ -437,7 +416,6 @@ async def execute_terminal(request: TerminalRequest):
 
     timeout = request.timeout or 30
 
-    # 工作目录
     cwd = None
     if request.workspace_id:
         _local_workspaces.update(_load_local_workspaces())
@@ -450,12 +428,10 @@ async def execute_terminal(request: TerminalRequest):
                 raise HTTPException(status_code=404, detail="工作空间不存在")
             cwd = workspace
 
-    # 环境变量
     exec_env = {**os.environ}
     if perm is not None and hasattr(perm, "get_effective_env"):
         exec_env = perm.get_effective_env()
 
-    # Windows 用 cmd /c，Linux/Mac 用 /bin/sh -c
     if platform.system() == "Windows":
         exec_cmd = f'cmd /c "{request.command}"'
     else:
@@ -477,7 +453,7 @@ async def execute_terminal(request: TerminalRequest):
             )
             return proc
         except subprocess.TimeoutExpired as e:
-            raise asyncio.TimeoutError() from e
+            raise asyncio.TimeoutError from e
         except Exception as e:
             raise e
 
@@ -615,3 +591,9 @@ async def browse_directory(path: str = ""):
         }
     except PermissionError:
         raise HTTPException(status_code=403, detail=f"无权限访问: {path}")
+'''
+
+with open(r"F:\360MoveData\Users\Administrator\Desktop\beta4\nexusflow\backend\app\api\sandbox.py", "w", encoding="utf-8") as f:
+    f.write(content)
+
+print("sandbox.py written successfully")

@@ -1,24 +1,27 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   Terminal, Plus, Trash2, FolderOpen, Clock, Shield,
   CheckCircle, XCircle, AlertTriangle, Play, RefreshCw,
-  Code2, Globe, HardDrive, Cpu, Monitor,
+  Code2, Globe, HardDrive, Cpu, Monitor, FolderSync,
+  Edit3, Search,
 } from 'lucide-react'
 import { useSandboxStore } from '../stores/sandboxStore'
 import PermissionEditor from '../components/sandbox/PermissionEditor'
+import FolderPicker from '../components/sandbox/FolderPicker'
 import type { Permission, ExecutionRecord } from '../types/sandbox'
-import { apiCreatePermission, apiDeletePermission, apiCreateWorkspace, apiDeleteWorkspace } from '../types/sandbox'
+import { apiCreatePermission, apiUpdatePermission, apiDeletePermission } from '../types/sandbox'
 
 type Tab = 'workspaces' | 'executions' | 'permissions' | 'terminal'
 
 // 权限分类
-const PERM_CATEGORIES: Record<string, { label: string; icon: any; ids: string[] }> = {
-  basic: { label: '基础', icon: Shield, ids: ['isolated'] },
-  data: { label: '数据', icon: HardDrive, ids: ['data-analysis', 'machine-learning'] },
-  network: { label: '网络', icon: Globe, ids: ['web-request', 'web-scraping'] },
-  dev: { label: '开发', icon: Code2, ids: ['frontend-dev', 'terminal', 'dev-tools'] },
-  full: { label: '全能', icon: Cpu, ids: ['full-access'] },
-}
+  // 权限分类（内置模板）
+  const PERM_CATEGORIES: Record<string, { label: string; icon: any; ids: string[] }> = {
+    basic: { label: '基础', icon: Shield, ids: ['isolated'] },
+    data: { label: '数据', icon: HardDrive, ids: ['data-analysis', 'machine-learning'] },
+    network: { label: '网络', icon: Globe, ids: ['web-request', 'web-scraping'] },
+    dev: { label: '开发', icon: Code2, ids: ['frontend-dev', 'terminal', 'dev-tools'] },
+    full: { label: '全能', icon: Cpu, ids: ['full-access'] },
+  }
 
 export default function Sandbox() {
   const {
@@ -32,19 +35,32 @@ export default function Sandbox() {
   const [expandedWorkspace, setExpandedWorkspace] = useState<string | null>(null)
   const [showPermEditor, setShowPermEditor] = useState(false)
   const [editingPerm, setEditingPerm] = useState<Permission | null>(null)
-  const [quickCode, setQuickCode] = useState('# 在此输入代码\nprint("Hello from NexusFlow!")')
-  const [quickLang, setQuickLang] = useState('python')
-  const [quickResult, setQuickResult] = useState<ExecutionRecord | null>(null)
-  const [isQuickRunning, setIsQuickRunning] = useState(false)
+  const [editingPermIsCopy, setEditingPermIsCopy] = useState(false)
   const [newWsPerm, setNewWsPerm] = useState('')
   const [error, setError] = useState('')
   const [permLoading, setPermLoading] = useState(true)
+
+  // 挂载本地目录状态
+  const [showMountInput, setShowMountInput] = useState(false)
+  const [localPath, setLocalPath] = useState('')
+  const [isMounting, setIsMounting] = useState(false)
+  const [showFolderPicker, setShowFolderPicker] = useState(false)
 
   // 终端状态
   const [termInput, setTermInput] = useState('')
   const [termHistory, setTermHistory] = useState<string[]>([])
   const [termHistoryIdx, setTermHistoryIdx] = useState(-1)
   const [isTermRunning, setIsTermRunning] = useState(false)
+
+  // 动态权限分类：内置 + 自定义
+  const allPermCategories = useMemo(() => {
+    const cats: Record<string, { label: string; icon: any; ids: string[] }> = { ...PERM_CATEGORIES }
+    const customPerms = permissions.filter(p => !p.is_builtin)
+    if (customPerms.length > 0) {
+      cats['custom'] = { label: '自定义', icon: Edit3, ids: customPerms.map(p => p.id) }
+    }
+    return cats
+  }, [permissions])
 
   useEffect(() => {
     setPermLoading(true)
@@ -59,35 +75,61 @@ export default function Sandbox() {
   const handleCreateWorkspace = async () => {
     setError('')
     try {
-      await createWorkspace(newWsPerm || undefined)
+      await createWorkspace({ permissionId: newWsPerm || undefined, type: 'virtual' })
       setNewWsPerm('')
     } catch (e: any) {
       setError(e.message)
     }
   }
 
+  const handleMountLocal = async () => {
+    const path = localPath.trim()
+    if (!path) return
+    setError('')
+    setIsMounting(true)
+    try {
+      await createWorkspace({ permissionId: newWsPerm || undefined, type: 'local', path })
+      setLocalPath('')
+      setShowMountInput(false)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setIsMounting(false)
+    }
+  }
+
+  const handleFolderSelect = () => {
+    setShowFolderPicker(true)
+  }
+
+  const handleFolderPick = async (path: string) => {
+    setShowFolderPicker(false)
+    setLocalPath(path)
+    setError('')
+    setIsMounting(true)
+    try {
+      await createWorkspace({ permissionId: newWsPerm || undefined, type: 'local', path })
+      setLocalPath('')
+      setShowMountInput(false)
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setIsMounting(false)
+    }
+  }
+
   const handleDeleteWorkspace = async (id: string) => {
-    if (!confirm('确定删除此工作空间？所有文件将被清除。')) return
+    const ws = workspaces.find(w => w.id === id)
+    const msg = ws?.type === 'local'
+      ? '确定解除此本地目录的绑定？（物理目录不会被删除）'
+      : '确定删除此虚拟工作空间？所有文件将被清除。'
+    if (!confirm(msg)) return
     setError('')
     try {
       await deleteWorkspace(id)
       if (expandedWorkspace === id) setExpandedWorkspace(null)
     } catch (e: any) {
       setError(e.message)
-    }
-  }
-
-  const handleQuickRun = async () => {
-    setError('')
-    setIsQuickRunning(true)
-    setQuickResult(null)
-    try {
-      const record = await executeCode(quickCode, quickLang)
-      setQuickResult(record)
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setIsQuickRunning(false)
     }
   }
 
@@ -134,6 +176,20 @@ export default function Sandbox() {
       await fetchPermissions()
       setShowPermEditor(false)
       setEditingPerm(null)
+      setEditingPermIsCopy(false)
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }
+
+  const handleEditPermission = async (data: Partial<Permission>) => {
+    if (!editingPerm) return
+    try {
+      await apiUpdatePermission(editingPerm.id, data)
+      await fetchPermissions()
+      setShowPermEditor(false)
+      setEditingPerm(null)
+      setEditingPermIsCopy(false)
     } catch (e: any) {
       setError(e.message)
     }
@@ -149,10 +205,24 @@ export default function Sandbox() {
     }
   }
 
+  const openPermEditor = (perm: Permission) => {
+    setEditingPerm(perm)
+    setEditingPermIsCopy(perm.is_builtin)
+    setShowPermEditor(true)
+  }
+
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  // 工作空间显示名称
+  const getWsDisplayName = (ws: { id: string; path: string; type: string }) => {
+    if (ws.type === 'local') {
+      return ws.path.split(/[/\\]/).filter(Boolean).pop() || ws.path
+    }
+    return ws.id.slice(0, 12)
   }
 
   const tabs: { key: Tab; label: string; icon: any; count: number }[] = [
@@ -181,11 +251,18 @@ export default function Sandbox() {
             <span>{executions.length} 执行</span>
           </div>
           <button
+            onClick={() => setShowMountInput(!showMountInput)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-surface-2 border border-border-tertiary rounded-xl text-sm text-text-primary hover:bg-surface-3 transition-colors"
+          >
+            <FolderSync className="w-4 h-4" />
+            挂载本地目录
+          </button>
+          <button
             onClick={handleCreateWorkspace}
             className="flex items-center gap-1.5 px-3 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity"
           >
             <Plus className="w-4 h-4" />
-            新建工作空间
+            新建虚拟空间
           </button>
         </div>
       </div>
@@ -201,24 +278,56 @@ export default function Sandbox() {
         </div>
       )}
 
-      {/* 新建工作空间选项 */}
-      <div className="flex items-center gap-3 bg-surface-2 rounded-xl px-4 py-2.5">
-        <span className="text-xs text-text-muted">创建时绑定权限：</span>
-        {permLoading ? (
-          <span className="text-xs text-text-muted">加载中...</span>
-        ) : (
-          <select
-            value={newWsPerm}
-            onChange={(e) => setNewWsPerm(e.target.value)}
-            className="bg-surface-1 border border-border-tertiary rounded-lg px-2 py-1 text-xs text-text-secondary focus:outline-none focus:border-primary"
-          >
-            <option value="">不绑定（使用默认权限）</option>
-            {permissions.map(p => (
-              <option key={p.id} value={p.id}>{p.name} — {p.description.slice(0, 30)}</option>
-            ))}
-          </select>
-        )}
-      </div>
+      {/* 挂载本地目录输入框 */}
+      {showMountInput && (
+        <div className="bg-surface-2 rounded-xl px-4 py-3 space-y-3">
+          <div className="flex items-center gap-3">
+            <FolderSync className="w-4 h-4 text-primary shrink-0" />
+            <input
+              value={localPath}
+              onChange={(e) => setLocalPath(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleMountLocal()}
+              placeholder="输入本地目录绝对路径，如 F:\MyProject"
+              className="flex-1 bg-surface-1 border border-border-tertiary rounded-lg px-3 py-2 text-sm text-text-primary font-mono focus:outline-none focus:border-primary"
+              autoFocus
+            />
+            <button
+              onClick={handleFolderSelect}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-surface-1 border border-border-tertiary rounded-lg text-sm text-text-secondary hover:bg-surface-3 hover:border-primary/50 transition-colors"
+            >
+              <Search className="w-3.5 h-3.5" />
+              浏览
+            </button>
+            {permLoading ? (
+              <span className="text-xs text-text-muted">加载中...</span>
+            ) : (
+              <select
+                value={newWsPerm}
+                onChange={(e) => setNewWsPerm(e.target.value)}
+                className="bg-surface-1 border border-border-tertiary rounded-lg px-2 py-1 text-xs text-text-secondary focus:outline-none focus:border-primary"
+              >
+                <option value="">默认权限</option>
+                {permissions.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={handleMountLocal}
+              disabled={isMounting || !localPath.trim()}
+              className="shrink-0 px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
+            >
+              {isMounting ? '挂载中...' : '挂载'}
+            </button>
+            <button
+              onClick={() => { setShowMountInput(false); setLocalPath('') }}
+              className="text-text-tertiary hover:text-text-secondary transition-colors"
+            >
+              <XCircle className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Tab 切换 */}
       <div className="flex gap-1 bg-surface-2 rounded-xl p-1">
@@ -248,15 +357,18 @@ export default function Sandbox() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {workspaces.length === 0 && (
             <div className="col-span-full text-center py-12 text-text-muted text-sm">
-              暂无工作空间，点击"新建工作空间"创建
+              暂无工作空间，点击上方按钮新建虚拟空间或挂载本地目录
             </div>
           )}
           {workspaces.map(ws => {
             const isExpanded = expandedWorkspace === ws.id
+            const isLocal = ws.type === 'local'
             return (
               <div
                 key={ws.id}
-                className="border border-border-secondary rounded-xl overflow-hidden hover:border-border-tertiary transition-colors"
+                className={`border rounded-xl overflow-hidden hover:border-border-tertiary transition-colors ${
+                  isLocal ? 'border-primary/20 bg-primary/[0.02]' : 'border-border-secondary'
+                }`}
               >
                 <div
                   className="px-4 py-3 cursor-pointer flex items-center justify-between"
@@ -265,12 +377,19 @@ export default function Sandbox() {
                     if (!isExpanded) refreshWorkspace(ws.id).catch(() => {})
                   }}
                 >
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <FolderOpen className="w-4 h-4 text-warning" />
-                      <span className="text-sm font-medium text-text-primary">{ws.id.slice(0, 12)}</span>
+                      <FolderOpen className={`w-4 h-4 shrink-0 ${isLocal ? 'text-primary' : 'text-warning'}`} />
+                      <span className="text-sm font-medium text-text-primary truncate">
+                        {getWsDisplayName(ws)}
+                      </span>
+                      <span className={`px-1.5 py-0.5 rounded text-xs shrink-0 ${
+                        isLocal ? 'bg-primary/10 text-primary' : 'bg-surface-tertiary text-text-muted'
+                      }`}>
+                        {isLocal ? '本地' : '虚拟'}
+                      </span>
                       {ws.permission_name && (
-                        <span className="px-1.5 py-0.5 rounded text-xs bg-primary/10 text-primary">
+                        <span className="px-1.5 py-0.5 rounded text-xs bg-primary/10 text-primary shrink-0">
                           {ws.permission_name}
                         </span>
                       )}
@@ -278,10 +397,13 @@ export default function Sandbox() {
                     <div className="flex gap-3 mt-1 text-xs text-text-muted">
                       <span>{ws.file_count} 文件</span>
                       <span>{formatBytes(ws.total_size)}</span>
+                      {isLocal && (
+                        <span className="truncate font-mono" title={ws.path}>{ws.path}</span>
+                      )}
                     </div>
                   </div>
                   <svg
-                    className={`w-4 h-4 text-text-tertiary transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                    className={`w-4 h-4 text-text-tertiary transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
                     fill="none" viewBox="0 0 24 24" stroke="currentColor"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -303,7 +425,7 @@ export default function Sandbox() {
                       className="mt-2 flex items-center gap-1 text-xs text-danger/70 hover:text-danger transition-colors"
                     >
                       <Trash2 className="w-3 h-3" />
-                      删除工作空间
+                      {isLocal ? '解除绑定' : '删除工作空间'}
                     </button>
                   </div>
                 )}
@@ -369,7 +491,7 @@ export default function Sandbox() {
         <div>
           <div className="flex justify-end mb-4">
             <button
-              onClick={() => { setEditingPerm(null); setShowPermEditor(true) }}
+              onClick={() => { setEditingPerm(null); setEditingPermIsCopy(false); setShowPermEditor(true) }}
               className="flex items-center gap-1.5 px-3 py-2 bg-surface-2 border border-border-tertiary rounded-xl text-sm text-text-primary hover:bg-surface-3 transition-colors"
             >
               <Plus className="w-4 h-4" />
@@ -380,7 +502,7 @@ export default function Sandbox() {
           {permLoading ? (
             <div className="text-center py-12 text-text-muted text-sm">加载权限模板中...</div>
           ) : (
-            Object.entries(PERM_CATEGORIES).map(([catKey, cat]) => {
+            Object.entries(allPermCategories).map(([catKey, cat]) => {
               const catPerms = permissions.filter(p => cat.ids.includes(p.id))
               if (catPerms.length === 0) return null
               return (
@@ -407,14 +529,23 @@ export default function Sandbox() {
                               <span className="px-1.5 py-0.5 rounded text-xs bg-surface-tertiary text-text-muted">内置</span>
                             )}
                           </div>
-                          {!perm.is_builtin && (
+                          <div className="flex items-center gap-1">
                             <button
-                              onClick={() => handleDeletePermission(perm.id)}
-                              className="text-text-tertiary hover:text-danger transition-colors"
+                              onClick={() => openPermEditor(perm)}
+                              className="text-text-tertiary hover:text-primary transition-colors"
+                              title={perm.is_builtin ? '基于此模板创建可编辑副本' : '编辑'}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Edit3 className="w-3.5 h-3.5" />
                             </button>
-                          )}
+                            {!perm.is_builtin && (
+                              <button
+                                onClick={() => handleDeletePermission(perm.id)}
+                                className="text-text-tertiary hover:text-danger transition-colors"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         <p className="text-xs text-text-secondary mb-3">{perm.description}</p>
@@ -442,15 +573,6 @@ export default function Sandbox() {
                           <span>内存 {perm.max_memory_mb}MB</span>
                           <span>{perm.allowed_languages.join(', ')}</span>
                         </div>
-
-                        {!perm.is_builtin && (
-                          <button
-                            onClick={() => { setEditingPerm(perm); setShowPermEditor(true) }}
-                            className="mt-3 text-xs text-primary hover:underline"
-                          >
-                            编辑
-                          </button>
-                        )}
                       </div>
                     ))}
                   </div>
@@ -464,14 +586,13 @@ export default function Sandbox() {
       {/* ==================== 终端 Tab ==================== */}
       {activeTab === 'terminal' && (
         <div className="border border-border-secondary rounded-xl overflow-hidden">
-          {/* 终端标题栏 */}
           <div className="flex items-center justify-between px-4 py-2 bg-surface-2 border-b border-border-tertiary">
             <div className="flex items-center gap-2">
               <Terminal className="w-4 h-4 text-primary" />
               <span className="text-sm font-medium text-text-primary">终端</span>
               {activeWorkspaceId && (
                 <span className="text-xs text-text-muted">
-                  工作空间: {activeWorkspaceId.slice(0, 8)}
+                  工作空间: {workspaces.find(w => w.id === activeWorkspaceId)?.path?.split(/[/\\]/).pop() || activeWorkspaceId.slice(0, 8)}
                 </span>
               )}
             </div>
@@ -483,7 +604,6 @@ export default function Sandbox() {
             </button>
           </div>
 
-          {/* 终端输出 */}
           <div className="bg-background p-4 min-h-[300px] max-h-[500px] overflow-y-auto font-mono text-xs">
             {executions.filter(e => e.language === 'terminal').length === 0 && termHistory.length === 0 ? (
               <div className="text-text-muted py-8 text-center font-sans">
@@ -525,7 +645,6 @@ export default function Sandbox() {
             )}
           </div>
 
-          {/* 终端输入 */}
           <div className="px-4 py-3 bg-surface-2 border-t border-border-tertiary">
             <div className="flex items-center gap-2 bg-background rounded-lg px-3 py-2 border border-border-tertiary focus-within:border-primary">
               <span className="text-primary font-mono text-sm">$</span>
@@ -547,8 +666,17 @@ export default function Sandbox() {
       {showPermEditor && (
         <PermissionEditor
           permission={editingPerm}
-          onSave={handleCreatePermission}
-          onCancel={() => { setShowPermEditor(false); setEditingPerm(null) }}
+          isCopyFromBuiltin={editingPermIsCopy}
+          onSave={editingPerm ? handleEditPermission : handleCreatePermission}
+          onCancel={() => { setShowPermEditor(false); setEditingPerm(null); setEditingPermIsCopy(false) }}
+        />
+      )}
+
+      {/* 文件夹选择器 */}
+      {showFolderPicker && (
+        <FolderPicker
+          onSelect={handleFolderPick}
+          onCancel={() => setShowFolderPicker(false)}
         />
       )}
     </div>
