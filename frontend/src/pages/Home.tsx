@@ -31,7 +31,8 @@ export default function Home() {
       await executeTask(task.id)
       toast('success', '任务执行完成！')
     } catch (e) {
-      toast('error', '任务创建失败')
+      const msg = e instanceof Error ? e.message : '任务执行失败'
+      toast('error', msg)
     } finally {
       setNewTaskInput('')
       setIsCreatingTask(false)

@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router-dom'
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Search, Bell, ChevronRight, Github, X } from 'lucide-react'
 
 const routeTitles: Record<string, string> = {
@@ -74,8 +75,8 @@ export function Header() {
             )}
           </button>
 
-          {/* Notification Panel */}
-          {showNotifications && (
+          {/* Notification Panel — portaled to body to escape header's backdrop-filter stacking context */}
+          {showNotifications && createPortal(
             <>
               <div
                 className="fixed inset-0 z-[99]"
@@ -128,7 +129,8 @@ export function Header() {
                   </button>
                 </div>
               </div>
-            </>
+            </>,
+            document.body
           )}
         </div>
       </div>

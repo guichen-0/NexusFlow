@@ -16,7 +16,7 @@ class ModelRouter:
         "translate": {"model": "gpt-4o", "temperature": 0.3},
         "schema": {"model": "deepseek-v3", "temperature": 0.2},
         "verify": {"model": "deepseek-r1", "temperature": 0.3},
-        "multimodal": {"model": "mimo", "temperature": 0.5},
+        "multimodal": {"model": "mimo-v2.5", "temperature": 0.5},
         "fast_generate": {"model": "deepseek-v4-flash", "temperature": 0.7},
         "pro_generate": {"model": "deepseek-v4-pro", "temperature": 0.7},
         "default": {"model": "gpt-3.5-turbo", "temperature": 0.5}

@@ -143,7 +143,7 @@ export const useChatStore = create<ChatState>()(
         }
 
         const settings = useSettingsStore.getState()
-        const { useMockMode, apiKey, apiBaseUrl, selectedModel } = settings
+        const { useMockMode, apiKey, apiBaseUrl, apiFormat, selectedModel } = settings
 
         // 构建用户消息
         const userMsg: ChatMessage = {
@@ -230,6 +230,7 @@ export const useChatStore = create<ChatState>()(
               stream: true,
               api_key: apiKey,
               api_base_url: apiBaseUrl,
+              api_format: apiFormat,
             }),
             signal,
           })

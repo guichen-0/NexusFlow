@@ -130,10 +130,11 @@ TOOLS = [
 class AIService:
     """AI 服务封装：支持 Mock 模式和真实 API，带 Tool Calling"""
 
-    def __init__(self, use_mock: bool = True, api_key: Optional[str] = None, base_url: Optional[str] = None):
+    def __init__(self, use_mock: bool = True, api_key: Optional[str] = None, base_url: Optional[str] = None, api_format: str = "openai"):
         self.use_mock = use_mock
         self.api_key = api_key
         self.base_url = base_url
+        self.api_format = api_format  # "openai" 或 "anthropic"
         self.sandbox_url = "http://localhost:8000/api/v1/sandbox"  # 沙箱 API 地址
 
     async def chat(self, messages: List[Dict], model: Optional[str] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
@@ -143,6 +144,8 @@ class AIService:
         """
         if self.use_mock or not self.api_key or self.api_key == "mock":
             return await self._mock_response(messages)
+        if self.api_format == "anthropic":
+            return await self._anthropic_request(messages, model, workspace_id)
         return await self._real_request(messages, model, workspace_id)
 
     async def _mock_response(self, messages: List[Dict]) -> Dict[str, Any]:
@@ -442,3 +445,67 @@ class AIService:
             "tool_calls": [],
             "tool_results": current_tool_results
         }
+
+    async def _anthropic_request(self, messages: List[Dict], model: Optional[str], workspace_id: Optional[str]) -> Dict[str, Any]:
+        """
+        Anthropic API 请求（支持 Tool Calling）
+        使用 Anthropic Messages API 格式
+        """
+        base_url = self.base_url.rstrip('/') if self.base_url else "https://api.anthropic.com"
+        url = f"{base_url}/v1/messages"
+
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01"
+        }
+
+        # 转换消息格式：Anthropic 要求 system 消息单独提取
+        system_message = ""
+        anthropic_messages = []
+        for msg in messages:
+            if msg.get("role") == "system":
+                system_message = msg.get("content", "")
+            else:
+                anthropic_messages.append({
+                    "role": msg.get("role", "user"),
+                    "content": msg.get("content", "")
+                })
+
+        # 转换工具格式：OpenAI -> Anthropic
+        anthropic_tools = []
+        for tool in TOOLS:
+            anthropic_tools.append({
+                "name": tool["function"]["name"],
+                "description": tool["function"]["description"],
+                "input_schema": tool["function"]["parameters"]
+            })
+
+        # 构建请求体 — Anthropic 格式暂不发送 tools（MiMo 不支持）
+        payload = {
+            "model": model or "mimo-v2.5",
+            "messages": anthropic_messages,
+            "max_tokens": 4096,
+        }
+        if system_message:
+            payload["system"] = system_message
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            # 第一轮请求
+            resp = await client.post(url, headers=headers, json=payload)
+            if resp.status_code != 200:
+                raise Exception(f"Anthropic API 请求失败: {resp.status_code} {resp.text}")
+
+            data = resp.json()
+
+            # 提取文本内容（跳过 thinking/tool_use 等非文本块）
+            content = ""
+            for block in data.get("content", []):
+                if block.get("type") == "text":
+                    content += block.get("text", "")
+
+                return {
+                    "content": content,
+                    "model": data.get("model", model),
+                    "usage": data.get("usage", {})
+                }

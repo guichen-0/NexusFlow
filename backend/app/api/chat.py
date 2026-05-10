@@ -22,7 +22,15 @@ class ChatRequest(BaseModel):
     stream: bool = True
     api_key: str = ""
     api_base_url: str = ""
+    api_format: str = "openai"  # "openai" 或 "anthropic"
     workspace_id: Optional[str] = None  # 工作空间 ID（用于 Tool Calling）
+
+
+class TestConnectionRequest(BaseModel):
+    api_key: str
+    api_base_url: str
+    api_format: str = "openai"
+    model: str = "deepseek-v3"
 
 
 @router.post("/chat")
@@ -34,6 +42,7 @@ async def chat(request: ChatRequest):
     # 配置 AI 服务
     ai_service.api_key = request.api_key
     ai_service.base_url = request.api_base_url if request.api_base_url else None
+    ai_service.api_format = request.api_format
     ai_service.use_mock = False
 
     if request.stream:
@@ -56,6 +65,61 @@ async def chat(request: ChatRequest):
             return result
         except Exception as e:
             raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/test-connection")
+async def test_connection(request: TestConnectionRequest):
+    """测试 API 连接（支持 OpenAI 和 Anthropic 格式）"""
+    if not request.api_key:
+        raise HTTPException(status_code=400, detail="API Key is required")
+
+    base_url = request.api_base_url.rstrip('/') if request.api_base_url else ""
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            if request.api_format == "anthropic":
+                # Anthropic 格式：base_url + /v1/messages
+                url = f"{base_url}/v1/messages"
+                headers = {
+                    "Content-Type": "application/json",
+                    "x-api-key": request.api_key,
+                    "anthropic-version": "2023-06-01"
+                }
+                payload = {
+                    "model": request.model,
+                    "messages": [{"role": "user", "content": "Hi"}],
+                    "max_tokens": 5
+                }
+            else:
+                # OpenAI 格式
+                url = f"{base_url}/chat/completions"
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {request.api_key}"
+                }
+                payload = {
+                    "model": request.model,
+                    "messages": [{"role": "user", "content": "Hi"}],
+                    "max_tokens": 5
+                }
+
+            resp = await client.post(url, headers=headers, json=payload)
+
+            if resp.status_code != 200:
+                error_msg = f"HTTP {resp.status_code}"
+                try:
+                    err_data = resp.json()
+                    error_msg = err_data.get("error", {}).get("message", error_msg)
+                except:
+                    pass
+                raise Exception(error_msg)
+
+            return {"success": True, "message": f"{request.model} 连接成功"}
+
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="连接超时，请检查网络或 API 地址")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 async def stream_chat_with_tool_support(request: ChatRequest, ai_service: AIService):

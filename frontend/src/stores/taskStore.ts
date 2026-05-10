@@ -98,6 +98,7 @@ function generateMockOutput(task: Task): string {
 async function callAIViaBackend(
   apiKey: string,
   apiBaseUrl: string,
+  apiFormat: string,
   model: string,
   inputText: string,
   onProgress: (progress: number, partialOutput: string) => void,
@@ -120,6 +121,7 @@ async function callAIViaBackend(
       stream: true,
       api_key: apiKey,
       api_base_url: apiBaseUrl,
+      api_format: apiFormat,
     }),
   })
 
@@ -270,7 +272,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
 
     // 获取设置
     const settings = useSettingsStore.getState()
-    const { useMockMode, apiKey, apiBaseUrl, selectedModel } = settings
+    const { useMockMode, apiKey, apiBaseUrl, apiFormat, selectedModel } = settings
 
     if (useMockMode) {
       // ===== Mock 模式 =====
@@ -295,7 +297,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
           output
         })
         set({ isExecuting: false })
-        return
+        throw new Error('未配置 API Key')
       }
 
       get().updateTask(taskId, { status: 'running', progress: 0 })
@@ -305,6 +307,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
         const fullContent = await callAIViaBackend(
           apiKey,
           apiBaseUrl,
+          apiFormat,
           selectedModel,
           task.input_text,
           (progress, partial) => {
@@ -358,6 +361,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
           progress: 0,
           output: errorOutput
         })
+        throw new Error(message)
       }
     }
 

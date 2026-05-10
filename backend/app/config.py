@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     AI_MODEL: str = "gpt-3.5-turbo"
 
     # 可用模型列表
-    AVAILABLE_MODELS: list = ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "mimo", "deepseek-v3", "deepseek-r1", "deepseek-v4-flash", "deepseek-v4-pro"]
+    AVAILABLE_MODELS: list = ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "mimo-v2.5", "mimo-v2.5-pro", "deepseek-v3", "deepseek-r1", "deepseek-v4-flash", "deepseek-v4-pro"]
 
     # 日志配置
     LOG_LEVEL: str = "INFO"

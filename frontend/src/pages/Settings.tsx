@@ -2,6 +2,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { Moon, Sun, Bot, Key, Globe, Save, Zap, CheckCircle, XCircle, Loader2 } from 'lucide-react'
 import { toast } from '../components/ui/Toast'
 import { useState } from 'react'
+import { MIMO_BILLING_OPTIONS } from '../lib/constants'
 
 export default function Settings() {
   const {
@@ -13,6 +14,7 @@ export default function Settings() {
     setSelectedModel,
     apiKey,
     apiBaseUrl,
+    apiFormat,
     setApiConfig
   } = useSettingsStore()
 
@@ -27,8 +29,11 @@ export default function Settings() {
     { id: 'gpt-4o', name: 'GPT-4o', provider: 'OpenAI' },
     { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'OpenAI' },
     { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', provider: 'OpenAI' },
-    { id: 'mimo', name: 'MiMo', provider: 'MiMo' },
+    { id: 'mimo-v2.5', name: 'MiMo V2.5', provider: 'MiMo' },
+    { id: 'mimo-v2.5-pro', name: 'MiMo V2.5 Pro', provider: 'MiMo' },
   ]
+
+  const isMimoModel = selectedModel.startsWith('mimo')
 
   const testConnection = async () => {
     if (!apiKey) {
@@ -47,17 +52,15 @@ export default function Settings() {
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 15000)
 
-      const response = await fetch('/api/ai-proxy', {
+      // 通过后端代理测试连接
+      const response = await fetch('/api/backend/v1/test-connection', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-AI-Target': apiBaseUrl.replace(/\/+$/, ''),
-          'X-AI-Authorization': `Bearer ${apiKey}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          api_key: apiKey,
+          api_base_url: apiBaseUrl,
+          api_format: apiFormat,
           model: selectedModel,
-          messages: [{ role: 'user', content: 'Hi' }],
-          max_tokens: 5,
         }),
         signal: controller.signal,
       })
@@ -68,7 +71,7 @@ export default function Settings() {
         let msg = `HTTP ${response.status}`
         try {
           const err = JSON.parse(errorText)
-          msg = err.error?.message || msg
+          msg = err.detail || err.error?.message || msg
         } catch { /* use default */ }
         throw new Error(msg)
       }
@@ -227,6 +230,39 @@ export default function Settings() {
             </p>
 
             <div className="mt-4 space-y-4">
+              {/* MiMo 计费方式选择 */}
+              {isMimoModel && (
+                <div>
+                  <label className="block text-sm text-text-secondary mb-2">
+                    MiMo 计费方式
+                  </label>
+                  <div className="flex gap-3">
+                    {MIMO_BILLING_OPTIONS.map(option => (
+                      <button
+                        key={option.id}
+                        onClick={() => {
+                          setApiConfig('apiBaseUrl', option.baseUrl)
+                          setApiConfig('apiFormat', option.format)
+                        }}
+                        className={`flex-1 p-3 rounded-lg border text-left transition-all ${
+                          apiBaseUrl === option.baseUrl
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border bg-surface-2 hover:border-primary/30'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium text-text-primary text-sm">{option.name}</span>
+                          {apiBaseUrl === option.baseUrl && (
+                            <div className="w-2 h-2 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        <p className="text-xs text-text-muted mt-1 truncate">{option.baseUrl}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm text-text-secondary mb-2">
                   API Base URL
@@ -253,12 +289,16 @@ export default function Settings() {
                     type="password"
                     value={apiKey}
                     onChange={(e) => setApiConfig('apiKey', e.target.value)}
-                    placeholder="sk-..."
+                    placeholder={apiFormat === 'anthropic' ? 'tp-...' : 'sk-...'}
                     className="w-full pl-10 pr-4 py-2.5 bg-surface-2 border border-border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-primary"
                   />
                 </div>
                 <p className="text-xs text-text-muted mt-2">
-                  {useMockMode ? 'Mock 模式已启用，API Key 不会被使用' : '请输入你的 OpenAI 或兼容 API Key'}
+                  {useMockMode
+                    ? 'Mock 模式已启用，API Key 不会被使用'
+                    : apiFormat === 'anthropic'
+                      ? '请输入你的 Anthropic API Key（格式：tp-...）'
+                      : '请输入你的 OpenAI 兼容 API Key（格式：sk-...）'}
                 </p>
               </div>
 

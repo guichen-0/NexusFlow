@@ -1,12 +1,55 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { Zap, Clock, TrendingUp, CheckCircle, Bot, Activity } from 'lucide-react'
-import { mockAnalytics, mockTokenUsage, mockExecutionHistory } from '../services/mock'
+import { useTaskStore } from '../stores/taskStore'
 import { formatNumber } from '../lib/utils'
+
+interface TokenUsageEntry {
+  date: string
+  tokens: number
+  requests: number
+}
 
 export default function Analytics() {
   const [activeTab, setActiveTab] = useState<'overview' | 'tokens' | 'execution'>('overview')
-  const stats = mockAnalytics
+  const tasks = useTaskStore(s => s.tasks)
+  const loadTasks = useTaskStore(s => s.loadTasks)
+
+  useEffect(() => { loadTasks() }, [])
+
+  const stats = useMemo(() => {
+    const completed = tasks.filter(t => t.status === 'completed')
+    const failed = tasks.filter(t => t.status === 'failed')
+    const totalDurations = completed
+      .map(t => t.duration_ms ?? 0)
+      .filter(d => d > 0)
+    const avgMs = totalDurations.length > 0
+      ? totalDurations.reduce((a, b) => a + b, 0) / totalDurations.length
+      : 0
+
+    return {
+      total_executions: tasks.length,
+      successful_executions: completed.length,
+      success_rate: tasks.length > 0 ? Math.round((completed.length / tasks.length) * 100) : 0,
+      avg_execution_time: +(avgMs / 1000).toFixed(1),
+    }
+  }, [tasks])
+
+  const tokenUsage = useMemo(() => {
+    const byDate = new Map<string, { tokens: number; requests: number }>()
+    for (const t of tasks) {
+      const date = t.created_at.slice(0, 10)
+      const entry = byDate.get(date) ?? { tokens: 0, requests: 0 }
+      entry.requests++
+      // 估算 token：output 长度 / 4 作为粗略估计
+      const estTokens = t.output ? Math.round(t.output.length / 4) : 0
+      entry.tokens += estTokens
+      byDate.set(date, entry)
+    }
+    return Array.from(byDate.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, data]) => ({ date, ...data }))
+  }, [tasks])
 
   return (
     <div className="space-y-6 animate-in">
@@ -20,43 +63,52 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Stats Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          icon={Zap}
-          label="总 Token 消耗"
-          value={formatNumber(stats.total_tokens)}
-          subtext="Token"
-          color="#6366f1"
-        />
-        <StatCard
-          icon={CheckCircle}
-          label="成功率"
-          value={`${stats.success_rate}%`}
-          subtext="任务成功"
-          color="#10b981"
-        />
-        <StatCard
-          icon={Clock}
-          label="平均执行时间"
-          value={`${stats.avg_execution_time}s`}
-          subtext="单次任务"
-          color="#8b5cf6"
-        />
-        <StatCard
-          icon={Bot}
-          label="活跃 Agent"
-          value={stats.active_workflows.toString()}
-          subtext="工作流"
-          color="#f59e0b"
-        />
-      </div>
+      {stats.total_executions === 0 && (
+        <div className="glass rounded-xl p-12 text-center">
+          <Activity className="w-12 h-12 text-text-muted mx-auto mb-4" />
+          <p className="text-text-secondary">暂无数据</p>
+          <p className="text-text-muted text-sm mt-1">执行任务后，这里会显示使用统计</p>
+        </div>
+      )}
+
+      {stats.total_executions > 0 && (<>
+        {/* Stats Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            icon={Zap}
+            label="总执行次数"
+            value={stats.total_executions.toString()}
+            subtext="次任务"
+            color="#6366f1"
+          />
+          <StatCard
+            icon={CheckCircle}
+            label="成功率"
+            value={`${stats.success_rate}%`}
+            subtext={`${stats.successful_executions}/${stats.total_executions}`}
+            color="#10b981"
+          />
+          <StatCard
+            icon={Clock}
+            label="平均执行时间"
+            value={stats.avg_execution_time > 0 ? `${stats.avg_execution_time}s` : '-'}
+            subtext="单次任务"
+            color="#8b5cf6"
+          />
+          <StatCard
+            icon={Bot}
+            label="失败任务"
+            value={(stats.total_executions - stats.successful_executions).toString()}
+            subtext="需要关注"
+            color="#f59e0b"
+          />
+        </div>
 
       {/* Tabs */}
       <div className="flex gap-2 border-b border-border">
         {[
           { id: 'overview', label: '总览' },
-          { id: 'tokens', label: 'Token 消耗' },
+          { id: 'tokens', label: '任务量趋势' },
           { id: 'execution', label: '执行历史' }
         ].map(tab => (
           <button
@@ -84,7 +136,7 @@ export default function Analytics() {
             <h3 className="text-lg font-semibold text-text-primary mb-4">Token 消耗趋势</h3>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={mockTokenUsage}>
+                <BarChart data={tokenUsage}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3e" />
                   <XAxis
                     dataKey="date"
@@ -116,7 +168,7 @@ export default function Analytics() {
             <h3 className="text-lg font-semibold text-text-primary mb-4">请求量趋势</h3>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={mockTokenUsage}>
+                <LineChart data={tokenUsage}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3e" />
                   <XAxis
                     dataKey="date"
@@ -152,7 +204,7 @@ export default function Analytics() {
 
       {activeTab === 'tokens' && (
         <div className="glass rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-text-primary mb-4">Token 消耗详情</h3>
+          <h3 className="text-lg font-semibold text-text-primary mb-4">每日任务量</h3>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -164,7 +216,7 @@ export default function Analytics() {
                 </tr>
               </thead>
               <tbody>
-                {mockTokenUsage.map(row => (
+                {tokenUsage.map(row => (
                   <tr key={row.date} className="border-b border-border/50">
                     <td className="px-4 py-3 text-sm text-text-primary">{row.date}</td>
                     <td className="px-4 py-3 text-sm text-text-primary text-right font-mono">
@@ -186,34 +238,34 @@ export default function Analytics() {
         <div className="glass rounded-xl p-6">
           <h3 className="text-lg font-semibold text-text-primary mb-4">执行历史</h3>
           <div className="space-y-3">
-            {mockExecutionHistory.map(exec => (
-              <div key={exec.id} className="flex items-center justify-between p-4 bg-surface-2 rounded-lg">
+            {tasks.map(task => (
+              <div key={task.id} className="flex items-center justify-between p-4 bg-surface-2 rounded-lg">
                 <div className="flex items-center gap-4">
                   <div className={`w-2 h-2 rounded-full ${
-                    exec.status === 'completed' ? 'bg-success' : 'bg-primary animate-pulse'
+                    task.status === 'completed' ? 'bg-success' : task.status === 'failed' ? 'bg-danger' : 'bg-primary animate-pulse'
                   }`} />
                   <div>
-                    <p className="text-sm font-medium text-text-primary">{exec.workflow_name}</p>
+                    <p className="text-sm font-medium text-text-primary">{task.input_text}</p>
                     <p className="text-xs text-text-muted">
-                      {new Date(exec.started_at).toLocaleString('zh-CN')}
+                      {new Date(task.created_at).toLocaleString('zh-CN')}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-6">
-                  <div className="text-right">
-                    <p className="text-sm text-text-secondary">{exec.duration}s</p>
-                    <p className="text-xs text-text-muted">执行时间</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-text-secondary">{formatNumber(exec.tokens_used)}</p>
-                    <p className="text-xs text-text-muted">Token</p>
-                  </div>
+                  {task.duration_ms != null && (
+                    <div className="text-right">
+                      <p className="text-sm text-text-secondary">{(task.duration_ms / 1000).toFixed(1)}s</p>
+                      <p className="text-xs text-text-muted">执行时间</p>
+                    </div>
+                  )}
                   <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                    exec.status === 'completed'
+                    task.status === 'completed'
                       ? 'bg-success/10 text-success'
-                      : 'bg-primary/10 text-primary'
+                      : task.status === 'failed'
+                        ? 'bg-danger/10 text-danger'
+                        : 'bg-primary/10 text-primary'
                   }`}>
-                    {exec.status === 'completed' ? '已完成' : '运行中'}
+                    {task.status === 'completed' ? '已完成' : task.status === 'failed' ? '失败' : task.status === 'running' ? '运行中' : '等待中'}
                   </span>
                 </div>
               </div>
@@ -221,6 +273,7 @@ export default function Analytics() {
           </div>
         </div>
       )}
+      </>)}
     </div>
   )
 }

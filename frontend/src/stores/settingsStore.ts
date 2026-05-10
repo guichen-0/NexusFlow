@@ -12,6 +12,7 @@ interface SettingsState {
   selectedModel: string
   apiKey: string
   apiBaseUrl: string
+  apiFormat: 'openai' | 'anthropic'
 
   // 操作
   setMockMode: (enabled: boolean) => void
@@ -28,6 +29,7 @@ export const useSettingsStore = create<SettingsState>()(
       selectedModel: 'deepseek-v3',
       apiKey: '',
       apiBaseUrl: 'https://api.deepseek.com/v1',
+      apiFormat: 'openai',
 
       setMockMode: (enabled) => set({ useMockMode: enabled }),
       setTheme: (theme) => set({ theme }),

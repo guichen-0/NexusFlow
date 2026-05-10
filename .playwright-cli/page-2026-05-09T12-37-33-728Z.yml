@@ -1,0 +1,184 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e6]:
+      - img [ref=e8]
+      - generic [ref=e10]: NexusFlow
+    - navigation [ref=e11]:
+      - list [ref=e12]:
+        - listitem [ref=e13]:
+          - link "工作台" [ref=e14] [cursor=pointer]:
+            - /url: /
+            - img [ref=e15]
+            - generic [ref=e20]: 工作台
+        - listitem [ref=e21]:
+          - link "聊天" [ref=e22] [cursor=pointer]:
+            - /url: /chat
+            - img [ref=e23]
+            - generic [ref=e25]: 聊天
+        - listitem [ref=e26]:
+          - link "Skills" [ref=e27] [cursor=pointer]:
+            - /url: /skills
+            - img [ref=e28]
+            - generic [ref=e30]: Skills
+        - listitem [ref=e31]:
+          - link "沙箱" [ref=e32] [cursor=pointer]:
+            - /url: /sandbox
+            - img [ref=e33]
+            - generic [ref=e35]: 沙箱
+        - listitem [ref=e36]:
+          - link "工作流" [ref=e37] [cursor=pointer]:
+            - /url: /workflows
+            - img [ref=e38]
+            - generic [ref=e42]: 工作流
+        - listitem [ref=e43]:
+          - link "任务" [ref=e44] [cursor=pointer]:
+            - /url: /tasks
+            - img [ref=e45]
+            - generic [ref=e48]: 任务
+        - listitem [ref=e49]:
+          - link "Agent 团队" [ref=e50] [cursor=pointer]:
+            - /url: /agents
+            - img [ref=e51]
+            - generic [ref=e56]: Agent 团队
+        - listitem [ref=e57]:
+          - link "数据分析" [ref=e58] [cursor=pointer]:
+            - /url: /analytics
+            - img [ref=e59]
+            - generic [ref=e61]: 数据分析
+        - listitem [ref=e62]:
+          - link "设置" [ref=e63] [cursor=pointer]:
+            - /url: /settings
+            - img [ref=e64]
+            - generic [ref=e67]: 设置
+    - generic [ref=e69]:
+      - generic [ref=e72]: Mock 模式
+      - paragraph [ref=e73]: AI 调用使用模拟数据
+  - generic [ref=e74]:
+    - banner [ref=e75]:
+      - generic [ref=e76]:
+        - generic [ref=e77]: 工作台
+        - img [ref=e78]
+        - generic [ref=e80]: 概览
+      - generic [ref=e81]:
+        - generic [ref=e82]:
+          - img [ref=e83]
+          - textbox "搜索任务、工作流..." [ref=e86]
+        - link [ref=e87] [cursor=pointer]:
+          - /url: https://github.com/lzw-DDS/NexusFlow
+          - img [ref=e88]
+        - button [ref=e92] [cursor=pointer]:
+          - img [ref=e93]
+    - main [ref=e97]:
+      - generic [ref=e98]:
+        - generic [ref=e102]:
+          - generic [ref=e103]:
+            - img [ref=e104]
+            - generic [ref=e106]: AI 多模型协作引擎
+          - heading "欢迎回来，开始你的下一个 AI 任务" [level=1] [ref=e107]
+          - paragraph [ref=e108]: 输入需求描述，NexusFlow 将自动拆解任务并调度多个 AI Agent 协作完成。
+        - generic [ref=e109]:
+          - generic [ref=e110]:
+            - generic [ref=e111]:
+              - paragraph [ref=e112]: 总执行次数
+              - generic [ref=e113]: +12%
+            - generic [ref=e114]:
+              - paragraph [ref=e115]: "156"
+              - img [ref=e117]
+          - generic [ref=e119]:
+            - generic [ref=e120]:
+              - paragraph [ref=e121]: 成功执行
+              - generic [ref=e122]: 91%
+            - generic [ref=e123]:
+              - paragraph [ref=e124]: "142"
+              - img [ref=e126]
+          - generic [ref=e129]:
+            - generic [ref=e130]:
+              - paragraph [ref=e131]: 今日 Token
+              - generic [ref=e132]: 今日
+            - generic [ref=e133]:
+              - paragraph [ref=e134]: 175.0K
+              - img [ref=e136]
+          - generic [ref=e138]:
+            - generic [ref=e139]:
+              - paragraph [ref=e140]: 活跃 Agent
+              - generic [ref=e141]: 在线
+            - generic [ref=e142]:
+              - paragraph [ref=e143]: "5"
+              - img [ref=e145]
+        - generic [ref=e148]:
+          - generic [ref=e150]:
+            - heading "创建新任务" [level=2] [ref=e151]
+            - generic [ref=e152]:
+              - textbox "输入你的需求，例如：帮我写一个用户登录注册功能，用 Python Flask..." [ref=e153]
+              - generic [ref=e154]:
+                - generic [ref=e155]: "0"
+                - button "执行" [disabled] [ref=e156]:
+                  - img [ref=e157]
+                  - text: 执行
+            - generic [ref=e159]:
+              - paragraph [ref=e160]: 快捷模板
+              - generic [ref=e161]:
+                - button "自动代码工厂" [ref=e162] [cursor=pointer]:
+                  - text: 自动代码工厂
+                  - img [ref=e163]
+                - button "内容创作流水线" [ref=e165] [cursor=pointer]:
+                  - text: 内容创作流水线
+                  - img [ref=e166]
+                - button "批量任务处理器" [ref=e168] [cursor=pointer]:
+                  - text: 批量任务处理器
+                  - img [ref=e169]
+                - button "AI 训练数据生成" [ref=e171] [cursor=pointer]:
+                  - text: AI 训练数据生成
+                  - img [ref=e172]
+                - button "多语言文档翻译管线" [ref=e174] [cursor=pointer]:
+                  - text: 多语言文档翻译管线
+                  - img [ref=e175]
+          - generic [ref=e177]:
+            - generic [ref=e178]:
+              - heading "运行中" [level=2] [ref=e179]
+              - generic [ref=e180]: "0"
+            - generic [ref=e182]:
+              - img [ref=e183]
+              - paragraph [ref=e186]: 暂无运行中的任务
+        - generic [ref=e187]:
+          - generic [ref=e188]:
+            - heading "Agent 协作状态" [level=2] [ref=e189]
+            - generic [ref=e190]:
+              - generic [ref=e191]: 实时
+              - generic [ref=e193]: 2 活跃
+          - generic [ref=e194]:
+            - generic [ref=e195]:
+              - generic [ref=e196]:
+                - img [ref=e198]
+                - generic [ref=e201]: 需求分析 Agent
+              - paragraph [ref=e202]: 需求理解专家
+              - generic [ref=e203]: 正在分析用户需求：需要实现用户登录注册功能，使用 Python Flask 框架...
+            - generic [ref=e205]:
+              - generic [ref=e206]:
+                - img [ref=e208]
+                - generic [ref=e211]: 代码生成 Agent
+              - paragraph [ref=e212]: 全栈开发专家
+              - generic [ref=e213]: 正在生成用户认证相关代码，包括用户模型、路由和 JWT 验证...
+            - generic [ref=e215]:
+              - generic [ref=e216]:
+                - img [ref=e218]
+                - generic [ref=e221]: 代码审查 Agent
+              - paragraph [ref=e222]: 代码质量专家
+              - generic [ref=e223]: 等待代码生成完成后进行审查...
+            - generic [ref=e225]:
+              - generic [ref=e226]:
+                - img [ref=e228]
+                - generic [ref=e231]: 自动修复 Agent
+              - paragraph [ref=e232]: 调试专家
+            - generic [ref=e234]:
+              - generic [ref=e235]:
+                - img [ref=e237]
+                - generic [ref=e240]: 报告生成 Agent
+              - paragraph [ref=e241]: 文档编写专家
+        - generic [ref=e242]:
+          - generic [ref=e243]:
+            - heading "最近任务" [level=2] [ref=e244]
+            - generic [ref=e245]: 0 个任务
+          - generic [ref=e247]:
+            - img [ref=e248]
+            - paragraph [ref=e251]: 暂无任务记录
