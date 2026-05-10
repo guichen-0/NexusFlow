@@ -64,7 +64,7 @@ NexusFlow 是一个**AI 多模型协作任务引擎**，提供多轮对话、任
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/lzw-DDS/NexusFlow.git
+git clone https://github.com/guichen-0/NexusFlow.git
 cd NexusFlow
 ```
 
@@ -256,4 +256,4 @@ MIT License
 
 ## 👤 Author
 
-- GitHub: [lzw-DDS](https://github.com/lzw-DDS)
+- GitHub: [guichen-0](https://github.com/guichen-0)
