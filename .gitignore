@@ -36,3 +36,7 @@ npm-debug.log*
 *.sqlite
 *.sqlite3
 backend/data/
+
+# Playwright / Screenshots
+.playwright-cli/
+*.png
