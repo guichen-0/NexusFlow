@@ -123,6 +123,9 @@ export default defineConfig({
   plugins: [react(), aiProxyPlugin()],
   server: {
     port: 5173,
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
     proxy: {
       '/api/backend/v1': {
         target: 'http://localhost:8000',

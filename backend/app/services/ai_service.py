@@ -137,16 +137,17 @@ class AIService:
         self.api_format = api_format  # "openai" 或 "anthropic"
         self.sandbox_url = "http://localhost:8000/api/v1/sandbox"  # 沙箱 API 地址
 
-    async def chat(self, messages: List[Dict], model: Optional[str] = None, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    async def chat(self, messages: List[Dict], model: Optional[str] = None, workspace_id: Optional[str] = None, max_tokens: Optional[int] = None) -> Dict[str, Any]:
         """
         AI 聊天接口（带 Tool Calling）
         - workspace_id: 当前会话的工作空间 ID（用于工具执行）
+        - max_tokens: 最大输出 token 数（控制输出长度）
         """
         if self.use_mock or not self.api_key or self.api_key == "mock":
             return await self._mock_response(messages)
         if self.api_format == "anthropic":
-            return await self._anthropic_request(messages, model, workspace_id)
-        return await self._real_request(messages, model, workspace_id)
+            return await self._anthropic_request(messages, model, workspace_id, max_tokens)
+        return await self._real_request(messages, model, workspace_id, max_tokens)
 
     async def _mock_response(self, messages: List[Dict]) -> Dict[str, Any]:
         """模拟 AI 响应"""
@@ -270,7 +271,7 @@ class AIService:
                 return {"error": f"终端命令执行失败: {resp.text}"}
             return resp.json()
 
-    async def _real_request(self, messages: List[Dict], model: Optional[str], workspace_id: Optional[str]) -> Dict[str, Any]:
+    async def _real_request(self, messages: List[Dict], model: Optional[str], workspace_id: Optional[str], max_tokens: Optional[int] = None) -> Dict[str, Any]:
         """
         真实 AI API 请求（支持 Tool Calling）
         使用 OpenAI 兼容 API
@@ -290,6 +291,8 @@ class AIService:
             "tools": TOOLS,
             "tool_choice": "auto",  # 让 AI 自行决定是否调用工具
         }
+        if max_tokens:
+            payload["max_tokens"] = max_tokens
 
         tool_results = []
         current_messages = messages.copy()
@@ -348,6 +351,8 @@ class AIService:
                     "tools": TOOLS,
                     "tool_choice": "auto"
                 }
+                if max_tokens:
+                    payload2["max_tokens"] = max_tokens
 
                 resp2 = await client.post(url, headers=headers, json=payload2)
                 if resp2.status_code != 200:
@@ -446,7 +451,7 @@ class AIService:
             "tool_results": current_tool_results
         }
 
-    async def _anthropic_request(self, messages: List[Dict], model: Optional[str], workspace_id: Optional[str]) -> Dict[str, Any]:
+    async def _anthropic_request(self, messages: List[Dict], model: Optional[str], workspace_id: Optional[str], max_tokens: Optional[int] = None) -> Dict[str, Any]:
         """
         Anthropic API 请求（支持 Tool Calling）
         使用 Anthropic Messages API 格式
@@ -485,7 +490,7 @@ class AIService:
         payload = {
             "model": model or "mimo-v2.5",
             "messages": anthropic_messages,
-            "max_tokens": 4096,
+            "max_tokens": max_tokens or 4096,
         }
         if system_message:
             payload["system"] = system_message
@@ -504,8 +509,8 @@ class AIService:
                 if block.get("type") == "text":
                     content += block.get("text", "")
 
-                return {
-                    "content": content,
-                    "model": data.get("model", model),
-                    "usage": data.get("usage", {})
-                }
+            return {
+                "content": content,
+                "model": data.get("model", model),
+                "usage": data.get("usage", {})
+            }

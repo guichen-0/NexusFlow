@@ -79,28 +79,28 @@ export default function Analytics() {
             label="总执行次数"
             value={stats.total_executions.toString()}
             subtext="次任务"
-            color="#6366f1"
+            color="var(--color-primary)"
           />
           <StatCard
             icon={CheckCircle}
             label="成功率"
             value={`${stats.success_rate}%`}
             subtext={`${stats.successful_executions}/${stats.total_executions}`}
-            color="#10b981"
+            color="var(--color-success)"
           />
           <StatCard
             icon={Clock}
             label="平均执行时间"
             value={stats.avg_execution_time > 0 ? `${stats.avg_execution_time}s` : '-'}
             subtext="单次任务"
-            color="#8b5cf6"
+            color="var(--color-accent)"
           />
           <StatCard
             icon={Bot}
             label="失败任务"
             value={(stats.total_executions - stats.successful_executions).toString()}
             subtext="需要关注"
-            color="#f59e0b"
+            color="var(--color-warning)"
           />
         </div>
 
@@ -137,27 +137,27 @@ export default function Analytics() {
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={tokenUsage}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3e" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis
                     dataKey="date"
-                    stroke="#64748b"
-                    tick={{ fill: '#64748b', fontSize: 12 }}
+                    stroke="var(--color-text-muted)"
+                    tick={{ fill: 'var(--color-text-muted)', fontSize: 12 }}
                     tickFormatter={(value) => value.slice(5)}
                   />
                   <YAxis
-                    stroke="#64748b"
-                    tick={{ fill: '#64748b', fontSize: 12 }}
+                    stroke="var(--color-text-muted)"
+                    tick={{ fill: 'var(--color-text-muted)', fontSize: 12 }}
                     tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: '#12121a',
-                      border: '1px solid #2a2a3e',
+                      backgroundColor: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
                       borderRadius: '8px'
                     }}
-                    labelStyle={{ color: '#e2e8f0' }}
+                    labelStyle={{ color: 'var(--color-text)' }}
                   />
-                  <Bar dataKey="tokens" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="tokens" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -169,31 +169,31 @@ export default function Analytics() {
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={tokenUsage}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3e" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
                   <XAxis
                     dataKey="date"
-                    stroke="#64748b"
-                    tick={{ fill: '#64748b', fontSize: 12 }}
+                    stroke="var(--color-text-muted)"
+                    tick={{ fill: 'var(--color-text-muted)', fontSize: 12 }}
                     tickFormatter={(value) => value.slice(5)}
                   />
                   <YAxis
-                    stroke="#64748b"
-                    tick={{ fill: '#64748b', fontSize: 12 }}
+                    stroke="var(--color-text-muted)"
+                    tick={{ fill: 'var(--color-text-muted)', fontSize: 12 }}
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: '#12121a',
-                      border: '1px solid #2a2a3e',
+                      backgroundColor: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
                       borderRadius: '8px'
                     }}
-                    labelStyle={{ color: '#e2e8f0' }}
+                    labelStyle={{ color: 'var(--color-text)' }}
                   />
                   <Line
                     type="monotone"
                     dataKey="requests"
-                    stroke="#8b5cf6"
+                    stroke="var(--color-accent)"
                     strokeWidth={2}
-                    dot={{ fill: '#8b5cf6', r: 4 }}
+                    dot={{ fill: 'var(--color-accent)', r: 4 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -295,7 +295,7 @@ function StatCard({ icon: Icon, label, value, subtext, color }: {
         </div>
         <div
           className="w-12 h-12 rounded-xl flex items-center justify-center"
-          style={{ backgroundColor: `${color}15` }}
+          style={{ backgroundColor: color, opacity: 0.15 }}
         >
           <Icon className="w-6 h-6" style={{ color }} />
         </div>

@@ -38,7 +38,7 @@ api.interceptors.response.use(
 export const workflowApi = {
   list: async (): Promise<Workflow[]> => {
     try {
-      const response = await api.get('/workflows')
+      const response = await api.get('/workflows/')
       return response.data
     } catch (error) {
       // 降级到 Mock 数据

@@ -1,10 +1,11 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Workspace, ExecutionRecord, Permission } from '../types/sandbox'
+import type { Workspace, ExecutionRecord, Permission, StreamCallbacks } from '../types/sandbox'
 import {
   apiCreateWorkspace, apiDeleteWorkspace, apiGetWorkspace,
   apiExecute, apiExecuteTerminal, apiGetExecutions, apiGetPermissions,
   apiWriteFile, apiReadFile, apiDeleteFile,
+  apiUploadFile, apiDownloadFile, apiExecuteStream,
 } from '../types/sandbox'
 
 interface SandboxState {
@@ -27,6 +28,9 @@ interface SandboxState {
   refreshWorkspace: (id: string) => Promise<void>
   executeCode: (code: string, language: string, opts?: { workspaceId?: string; permissionId?: string; timeout?: number }) => Promise<ExecutionRecord>
   executeTerminal: (command: string, opts?: { workspaceId?: string; permissionId?: string; timeout?: number }) => Promise<ExecutionRecord>
+  executeCodeStream: (code: string, language: string, callbacks: StreamCallbacks, opts?: { workspaceId?: string; permissionId?: string; timeout?: number }) => Promise<void>
+  uploadFile: (workspaceId: string, file: File, path?: string) => Promise<{ path: string; size: number }>
+  downloadFile: (workspaceId: string, path: string) => Promise<Blob>
   fetchExecutions: () => Promise<void>
   fetchPermissions: () => Promise<void>
   writeFile: (workspaceId: string, path: string, content: string) => Promise<void>
@@ -179,6 +183,66 @@ export const useSandboxStore = create<SandboxState>()(
         }
       },
 
+      executeCodeStream: async (code, language, callbacks, opts = {}) => {
+        set({ isExecuting: true })
+        let stdout = ''
+        let stderr = ''
+        try {
+          await apiExecuteStream(
+            {
+              code,
+              language,
+              workspace_id: opts.workspaceId || get().activeWorkspaceId || undefined,
+              permission_id: opts.permissionId,
+              timeout: opts.timeout,
+            },
+            {
+              onStdout: (line) => { stdout += line + '\n'; callbacks.onStdout?.(line) },
+              onStderr: (line) => { stderr += line + '\n'; callbacks.onStderr?.(line) },
+              onDone: (exitCode, durationMs, success) => {
+                const record: ExecutionRecord = {
+                  id: String(Date.now()),
+                  code: code.slice(0, 500),
+                  language,
+                  permission_id: opts.permissionId || null,
+                  permission_name: null,
+                  workspace_id: opts.workspaceId || get().activeWorkspaceId || null,
+                  exit_code: exitCode,
+                  stdout: stdout.slice(0, 1_000_000),
+                  stderr: stderr.slice(0, 1_000_000),
+                  duration_ms: durationMs,
+                  timed_out: exitCode === -1,
+                  success,
+                  executed_at: new Date().toISOString(),
+                }
+                set(s => ({
+                  executions: [record, ...s.executions].slice(0, 100),
+                  lastResult: record,
+                  isExecuting: false,
+                }))
+                callbacks.onDone?.(exitCode, durationMs, success)
+                const wsId = opts.workspaceId || get().activeWorkspaceId
+                if (wsId) get().refreshWorkspace(wsId).catch(() => {})
+              },
+              onError: (msg) => { set({ isExecuting: false }); callbacks.onError?.(msg) },
+            },
+          )
+        } catch (err: any) {
+          set({ isExecuting: false })
+          throw err
+        }
+      },
+
+      uploadFile: async (workspaceId, file, path) => {
+        const result = await apiUploadFile(workspaceId, file, path)
+        get().refreshWorkspace(workspaceId).catch(() => {})
+        return result
+      },
+
+      downloadFile: async (workspaceId, path) => {
+        return apiDownloadFile(workspaceId, path)
+      },
+
       fetchExecutions: async () => {
         const executions = await apiGetExecutions()
         set({ executions })
@@ -209,7 +273,6 @@ export const useSandboxStore = create<SandboxState>()(
       partialize: (state) => ({
         workspaces: state.workspaces,
         activeWorkspaceId: state.activeWorkspaceId,
-        executions: state.executions,
       }),
     }
   )

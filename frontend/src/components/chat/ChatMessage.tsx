@@ -1,7 +1,8 @@
-import { useState } from 'react'
-import { MessageCircle, User, CheckCircle, XCircle, Clock, Copy, Check, Play } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { MessageCircle, User, CheckCircle, XCircle, Clock, Copy, Check, Play, ChevronDown, ChevronRight, Brain, Users, Zap } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useSandboxStore } from '../../stores/sandboxStore'
+import type { AgentPipelineBlock } from '../../stores/chatStore'
 
 interface CodeExecution {
   language: string
@@ -18,6 +19,10 @@ interface ChatMessageProps {
   content: string
   isStreaming?: boolean
   executions?: CodeExecution[]
+  thinkingContent?: string
+  isThinkingStreaming?: boolean
+  agentPipeline?: AgentPipelineBlock[]
+  isAgentResult?: boolean
 }
 
 function ExecutionResult({ exec }: { exec: CodeExecution }) {
@@ -89,11 +94,9 @@ function CodeBlockWithRun({ children, className, codeText }: { children: React.R
       alert(`暂不支持在沙箱中运行 ${lang}`)
       return
     }
-    // 如果没有工作空间，自动创建
     if (!activeWorkspaceId) {
       await createWorkspace()
     }
-    // 确保面板打开
     setPanelOpen(true)
     try {
       await executeCode(codeText, mappedLang)
@@ -106,7 +109,6 @@ function CodeBlockWithRun({ children, className, codeText }: { children: React.R
 
   return (
     <div className="relative group rounded-lg overflow-hidden">
-      {/* 代码块工具栏 */}
       <div className="absolute top-0 right-0 flex items-center gap-0.5 px-2 py-1 bg-surface-tertiary/90 rounded-bl-lg opacity-0 group-hover:opacity-100 transition-opacity z-10">
         {lang && (
           <span className="text-xs text-text-tertiary mr-2">{lang}</span>
@@ -136,23 +138,128 @@ function CodeBlockWithRun({ children, className, codeText }: { children: React.R
   )
 }
 
-export default function ChatMessage({ role, content, isStreaming, executions }: ChatMessageProps) {
+function ThinkingBlock({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const contentRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isStreaming && expanded && contentRef.current) {
+      contentRef.current.scrollTop = contentRef.current.scrollHeight
+    }
+  }, [content, isStreaming, expanded])
+
+  return (
+    <div className="mb-2 rounded-xl border border-border-tertiary overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-text-tertiary hover:text-text-secondary hover:bg-surface-tertiary/50 transition-colors"
+      >
+        <Brain className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+        {expanded ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
+        <span className="truncate">
+          {isStreaming ? '思考中...' : '思考过程'}
+        </span>
+        {isStreaming && (
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse shrink-0" />
+        )}
+      </button>
+      {expanded && (
+        <div
+          ref={contentRef}
+          className="px-3 pb-2 text-xs text-text-secondary leading-relaxed max-h-48 overflow-y-auto bg-surface-tertiary/30 whitespace-pre-wrap border-t border-border-tertiary"
+        >
+          {content}
+          {isStreaming && (
+            <span className="inline-block w-0.5 h-3 bg-purple-400 align-text-bottom animate-pulse ml-0.5" />
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+function AgentPipelineBlock({ block }: { block: AgentPipelineBlock }) {
+  const [expanded, setExpanded] = useState(false)
+
+  return (
+    <div className={`mb-2 rounded-xl border overflow-hidden ${
+      block.status === 'error' ? 'border-danger/30' : 'border-accent/20'
+    }`}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-xs hover:bg-surface-tertiary/50 transition-colors"
+      >
+        {block.status === 'error' ? (
+          <XCircle className="w-3.5 h-3.5 text-danger shrink-0" />
+        ) : (
+          <CheckCircle className="w-3.5 h-3.5 text-success shrink-0" />
+        )}
+        {expanded ? <ChevronDown className="w-3 h-3 shrink-0 text-text-tertiary" /> : <ChevronRight className="w-3 h-3 shrink-0 text-text-tertiary" />}
+        <span className="font-medium text-text-primary">{block.agent_name}</span>
+        {block.tokens && block.tokens.total_tokens > 0 && (
+          <span className="text-text-tertiary ml-auto flex items-center gap-1">
+            <Zap className="w-3 h-3" />
+            {block.tokens.total_tokens} tok
+          </span>
+        )}
+      </button>
+      {expanded && (
+        <div className="px-3 pb-2 text-xs text-text-secondary leading-relaxed max-h-60 overflow-y-auto bg-surface-tertiary/30 whitespace-pre-wrap border-t border-border-tertiary">
+          {block.status === 'error' ? (
+            <span className="text-danger">{block.error}</span>
+          ) : (
+            block.output
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+export default function ChatMessage({
+  role, content, isStreaming, executions, thinkingContent,
+  isThinkingStreaming, agentPipeline, isAgentResult,
+}: ChatMessageProps) {
   const isUser = role === 'user'
 
   return (
     <div className={`flex gap-3 px-4 py-3 ${isUser ? 'justify-end' : ''}`}>
       {!isUser && (
-        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <MessageCircle className="w-4 h-4 text-primary" />
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+          isAgentResult ? 'bg-accent/10' : 'bg-primary/10'
+        }`}>
+          {isAgentResult ? (
+            <Users className="w-4 h-4 text-accent" />
+          ) : (
+            <MessageCircle className="w-4 h-4 text-primary" />
+          )}
         </div>
       )}
 
       <div className={`max-w-[75%] ${isUser ? 'order-1' : ''}`}>
+        {/* 思考过程（仅 assistant） */}
+        {!isUser && thinkingContent && (
+          <ThinkingBlock content={thinkingContent} isStreaming={isThinkingStreaming} />
+        )}
+
+        {/* Agent 流水线块 */}
+        {!isUser && agentPipeline && agentPipeline.length > 0 && (
+          <div className="mb-2">
+            {agentPipeline.map((block) => (
+              <AgentPipelineBlock key={block.agent_id} block={block} />
+            ))}
+          </div>
+        )}
+
         <div
           className={`px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
             isUser
               ? 'bg-primary text-white rounded-br-md whitespace-pre-wrap'
-              : 'bg-surface-2 text-text-primary rounded-bl-md'
+              : isAgentResult
+                ? 'bg-accent/5 border border-accent/20 text-text-primary rounded-bl-md'
+                : 'bg-surface-2 text-text-primary rounded-bl-md'
           }`}
         >
           {isUser ? (
@@ -162,7 +269,6 @@ export default function ChatMessage({ role, content, isStreaming, executions }: 
               <ReactMarkdown
                 components={{
                   pre: ({ children }) => {
-                    // 提取代码文本
                     const codeEl = (children as any)?.props?.children
                     const codeText = typeof codeEl === 'string' ? codeEl : ''
                     const className = (children as any)?.props?.className

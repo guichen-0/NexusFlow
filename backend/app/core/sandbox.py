@@ -120,6 +120,27 @@ class SandboxExecutor:
             if own_workspace:
                 self.cleanup_workspace(workspace_path)
 
+    def _build_import_guard(self, allow_list: list, deny_list: list) -> str:
+        """生成 import 限制代码，注入到用户代码之前"""
+        import json as _json
+        allow_json = _json.dumps(allow_list)
+        deny_json = _json.dumps(deny_list)
+        return f'''import builtins as _builtins
+_original_import = _builtins.__import__
+_ALLOW_IMPORTS = {allow_json}
+_DENY_IMPORTS = {deny_json}
+
+def _restricted_import(name, *args, **kwargs):
+    root = name.split(".")[0]
+    if _DENY_IMPORTS and root in _DENY_IMPORTS:
+        raise ImportError(f"模块 '{{root}}' 被当前权限禁止导入")
+    if _ALLOW_IMPORTS and root not in _ALLOW_IMPORTS:
+        raise ImportError(f"模块 '{{root}}' 不在允许列表中。允许: {{', '.join(_ALLOW_IMPORTS)}}")
+    return _original_import(name, *args, **kwargs)
+
+_builtins.__import__ = _restricted_import
+'''
+
     async def _execute_python(
         self, code: str, workspace: str, timeout: int, stdin_data: Optional[str],
         permissions: Optional[object] = None,
@@ -127,8 +148,17 @@ class SandboxExecutor:
         """执行 Python 代码"""
         script_path = os.path.join(workspace, "main.py")
 
+        # 注入 import 限制
+        final_code = code
+        if permissions is not None:
+            allow_list = getattr(permissions, "allow_imports", []) or []
+            deny_list = getattr(permissions, "deny_imports", []) or []
+            if allow_list or deny_list:
+                guard = self._build_import_guard(allow_list, deny_list)
+                final_code = guard + "\n" + code
+
         with open(script_path, "w", encoding="utf-8") as f:
-            f.write(code)
+            f.write(final_code)
 
         # 根据权限生成环境变量
         exec_env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}

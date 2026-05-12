@@ -1,6 +1,8 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { MainLayout } from './components/layout/MainLayout'
 import { ToastContainer } from './components/ui/Toast'
+import { useSettingsStore } from './stores/settingsStore'
 import Home from './pages/Home'
 import Workflows from './pages/Workflows'
 import WorkflowEditor from './pages/WorkflowEditor'
@@ -13,6 +15,12 @@ import Analytics from './pages/Analytics'
 import Settings from './pages/Settings'
 
 function App() {
+  const theme = useSettingsStore((s) => s.theme)
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
+
   return (
     <BrowserRouter>
       <Routes>

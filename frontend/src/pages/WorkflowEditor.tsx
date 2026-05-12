@@ -17,15 +17,15 @@ import {
 const Flow = ReactFlow as any as React.ComponentType<any>
 import '@xyflow/react/dist/style.css'
 import { ArrowLeft, Info, CheckCircle2, Loader2, Clock, AlertCircle, Zap } from 'lucide-react'
-import { mockWorkflowTemplates } from '../services/mock'
-import type { WorkflowNode } from '../types/workflow'
+import { useWorkflowStore } from '../stores/workflowStore'
+import type { WorkflowNode, Workflow } from '../types/workflow'
 import { toast } from '../components/ui/Toast'
 
 const nodeStatusColors: Record<string, string> = {
-  pending: '#64748b',
-  running: '#6366f1',
-  completed: '#10b981',
-  failed: '#ef4444',
+  pending: 'var(--color-text-muted)',
+  running: 'var(--color-primary)',
+  completed: 'var(--color-success)',
+  failed: 'var(--color-danger)',
 }
 
 const nodeTypeIcons: Record<string, string> = {
@@ -42,17 +42,18 @@ const nodeTypeIcons: Record<string, string> = {
 // Custom glass-morphism node component
 function WorkflowNodeComponent({ data }: NodeProps) {
   const color = (data.status && typeof data.status === 'string')
-    ? (nodeStatusColors as any)[data.status] || '#64748b'
-    : '#64748b'
+    ? (nodeStatusColors as any)[data.status] || 'var(--color-text-muted)'
+    : 'var(--color-text-muted)'
   const icon = (typeof data.icon === 'string') ? data.icon : '⚡'
 
   return (
     <div
       className="px-4 py-3 rounded-xl border backdrop-blur-md transition-all duration-200 hover:shadow-lg min-w-[160px]"
       style={{
-        background: 'rgba(18, 18, 26, 0.85)',
-        borderColor: `${color}50`,
-        boxShadow: data.status === 'running' ? `0 0 20px ${color}25` : undefined,
+        background: 'var(--color-surface-85)',
+        borderColor: color,
+        opacity: 0.85,
+        boxShadow: data.status === 'running' ? `0 0 20px var(--color-primary-30)` : undefined,
       }}
     >
       <Handle
@@ -62,7 +63,7 @@ function WorkflowNodeComponent({ data }: NodeProps) {
           background: color,
           width: 10,
           height: 10,
-          border: '2px solid #12121a',
+          border: '2px solid var(--color-surface)',
         }}
       />
       <div className="flex items-center gap-2.5">
@@ -87,7 +88,7 @@ function WorkflowNodeComponent({ data }: NodeProps) {
           background: color,
           width: 10,
           height: 10,
-          border: '2px solid #12121a',
+          border: '2px solid var(--color-surface)',
         }}
       />
     </div>
@@ -100,22 +101,31 @@ export default function WorkflowEditor() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [selectedNode, setSelectedNode] = useState<WorkflowNode | null>(null)
-  const [isExecuting, setIsExecuting] = useState(false)
-  const [nodeStatuses, setNodeStatuses] = useState<Record<string, 'pending' | 'running' | 'completed' | 'failed'>>({})
+  const { workflows, loadWorkflows, getWorkflow, nodeExecutions, isExecuting, executeWorkflow } = useWorkflowStore()
+  const [workflow, setWorkflow] = useState<Workflow | null>(null)
 
-  const workflow = useMemo(
-    () => mockWorkflowTemplates.find(w => w.id === id),
-    [id]
-  )
-
-  // Initialize node statuses when workflow changes
+  // Load workflows and find current one
   useEffect(() => {
-    if (workflow?.nodes) {
-      const initial: Record<string, 'pending' | 'running' | 'completed' | 'failed'> = {}
-      workflow.nodes.forEach(n => { initial[n.id] = 'pending' })
-      setNodeStatuses(initial)
+    const load = async () => {
+      if (workflows.length === 0) await loadWorkflows()
+      if (id) {
+        const w = workflows.find(w => w.id === id) || await getWorkflow(id)
+        setWorkflow(w)
+      }
     }
-  }, [workflow])
+    load()
+  }, [id])
+
+  const nodeStatuses = useMemo(() => {
+    const statuses: Record<string, 'pending' | 'running' | 'completed' | 'failed'> = {}
+    for (const [nodeId, exec] of Object.entries(nodeExecutions)) {
+      statuses[nodeId] = exec.status as any
+    }
+    return statuses
+  }, [nodeExecutions])
+
+  // Force React Flow to re-render when statuses change
+  const statusKey = useMemo(() => JSON.stringify(nodeStatuses), [nodeStatuses])
 
   // Convert workflow nodes to React Flow elements with layered layout
   const { nodes, edges } = useMemo(() => {
@@ -185,84 +195,26 @@ export default function WorkflowEditor() {
           target: node.id,
           type: 'smoothstep',
           animated: true,
-          style: { stroke: '#4a4a7e', strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: '#4a4a7e' },
+          style: { stroke: 'var(--color-border-2)', strokeWidth: 2 },
+          markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16, color: 'var(--color-border-2)' },
         })
       })
     })
 
     return { nodes: flowNodes, edges: flowEdges }
-  }, [workflow])
+  }, [workflow, statusKey])
 
   const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
     const originalNode = workflow?.nodes.find(n => n.id === node.id)
     setSelectedNode(originalNode ?? null)
   }, [workflow])
 
-  // Topological sort for execution order
-  const getExecutionOrder = useCallback(() => {
-    if (!workflow?.nodes) return []
-    const nodeMap = new Map(workflow.nodes.map(n => [n.id, n]))
-    const inDegree = new Map<string, number>()
-    const adjList = new Map<string, string[]>()
-
-    workflow.nodes.forEach(n => {
-      inDegree.set(n.id, n.depends_on.length)
-      adjList.set(n.id, [])
-    })
-    workflow.nodes.forEach(n => {
-      n.depends_on.forEach(depId => {
-        const adj = adjList.get(depId) || []
-        adj.push(n.id)
-        adjList.set(depId, adj)
-      })
-    })
-
-    const queue: string[] = []
-    const result: string[] = []
-    inDegree.forEach((deg, id) => {
-      if (deg === 0) queue.push(id)
-    })
-
-    while (queue.length > 0) {
-      const nodeId = queue.shift()!
-      result.push(nodeId)
-      const adjs = adjList.get(nodeId) || []
-      adjs.forEach(adj => {
-        const newDeg = (inDegree.get(adj) || 0) - 1
-        inDegree.set(adj, newDeg)
-        if (newDeg === 0) queue.push(adj)
-      })
-    }
-    return result
-  }, [workflow])
-
   const handleExecute = useCallback(async () => {
-    if (!workflow?.nodes || isExecuting) return
-    setIsExecuting(true)
+    if (!workflow || isExecuting) return
     toast('info', '开始执行工作流...')
-
-    // Reset all nodes to pending
-    const initial: Record<string, 'pending' | 'running' | 'completed' | 'failed'> = {}
-    workflow.nodes.forEach(n => { initial[n.id] = 'pending' })
-    setNodeStatuses(initial)
-
-    // Wait a bit then start execution
-    await new Promise(r => setTimeout(r, 500))
-
-    // Get execution order
-    const order = getExecutionOrder()
-
-    // Execute nodes in order
-    for (const nodeId of order) {
-      setNodeStatuses(prev => ({ ...prev, [nodeId]: 'running' }))
-      await new Promise(r => setTimeout(r, 800 + Math.random() * 400))
-      setNodeStatuses(prev => ({ ...prev, [nodeId]: 'completed' }))
-    }
-
-    setIsExecuting(false)
+    await executeWorkflow(workflow.id, workflow.description)
     toast('success', '工作流执行完成！')
-  }, [workflow, isExecuting, getExecutionOrder])
+  }, [workflow, isExecuting, executeWorkflow])
 
   if (!workflow) {
     return (
@@ -332,14 +284,14 @@ export default function WorkflowEditor() {
           nodeTypes={nodeTypes}
           fitView
           fitViewOptions={{ padding: 0.3 }}
-          style={{ background: '#0a0a0f', width: '100%', height: '100%' }}
+          style={{ background: 'var(--color-bg)', width: '100%', height: '100%' }}
         >
-          <Background gap={24} size={1} color="#2a2a3e" />
-          <Controls showInteractive={false} style={{ backgroundColor: '#12121a', borderColor: '#2a2a3e' }} />
+          <Background gap={24} size={1} color="var(--color-border)" />
+          <Controls showInteractive={false} style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }} />
           <MiniMap
-            nodeColor={() => '#6366f130'}
-            maskColor="rgba(10, 10, 15, 0.75)"
-            style={{ backgroundColor: '#12121a', borderColor: '#2a2a3e' }}
+            nodeColor={() => 'var(--color-primary-15)'}
+            maskColor="var(--color-bg-75)"
+            style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
           />
         </Flow>
 

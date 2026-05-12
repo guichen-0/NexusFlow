@@ -14,11 +14,15 @@ interface SettingsState {
   apiBaseUrl: string
   apiFormat: 'openai' | 'anthropic'
 
+  // 深度思考模式
+  thinkingMode: boolean
+
   // 操作
   setMockMode: (enabled: boolean) => void
   setTheme: (theme: 'dark' | 'light') => void
   setSelectedModel: (model: string) => void
   setApiConfig: (key: string, value: string) => void
+  setThinkingMode: (enabled: boolean) => void
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -30,11 +34,13 @@ export const useSettingsStore = create<SettingsState>()(
       apiKey: '',
       apiBaseUrl: 'https://api.deepseek.com/v1',
       apiFormat: 'openai',
+      thinkingMode: false,
 
       setMockMode: (enabled) => set({ useMockMode: enabled }),
       setTheme: (theme) => set({ theme }),
       setSelectedModel: (model) => set({ selectedModel: model }),
-      setApiConfig: (key, value) => set({ [key]: value })
+      setApiConfig: (key, value) => set({ [key]: value }),
+      setThinkingMode: (enabled) => set({ thinkingMode: enabled })
     }),
     {
       name: 'nexusflow-settings'

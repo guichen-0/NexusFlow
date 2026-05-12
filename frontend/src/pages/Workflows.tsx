@@ -124,7 +124,7 @@ function WorkflowCard({ workflow, index }: { workflow: any; index: number }) {
             <div key={node.id} className="flex items-center">
               <div
                 className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-medium"
-                style={{ backgroundColor: '#6366f1', color: 'white' }}
+                style={{ backgroundColor: 'var(--color-primary)', color: 'white' }}
               >
                 {i + 1}
               </div>

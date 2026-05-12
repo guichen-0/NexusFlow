@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Version-2.0.0-6366f1?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/Version-2.1.0-6366f1?style=flat-square" alt="Version">
   <img src="https://img.shields.io/badge/Python-3.14-3776AB?style=flat-square" alt="Python">
   <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square" alt="React">
   <img src="https://img.shields.io/badge/FastAPI-0.115-009688?style=flat-square" alt="FastAPI">
@@ -25,13 +25,16 @@
 
 ## 项目简介
 
-NexusFlow 是一个**AI 多模型协作任务引擎**，提供多轮对话、任务管理和 DAG 工作流可视化编排三大核心能力。
+NexusFlow 是一个**AI 多模型协作任务引擎**，提供多轮对话、任务管理、DAG 工作流可视化编排、Agent 团队协作和在线代码沙箱六大核心能力。
 
 ### 它能做什么？
 
 1. **AI 对话** — 多轮上下文对话，支持 SSE 流式输出，AI 记住完整对话历史
-2. **任务管理** — 从对话或工作台创建任务，AI 执行后可一键跳回对话继续追问
+2. **Agent 团队** — 内置多 Agent 流水线协作，自然语言驱动的智能任务分工
 3. **工作流编排** — 可视化 DAG 编辑器，预设 8 个工作流模板，支持串行/并行节点
+4. **代码沙箱** — 在线执行 Python/JavaScript/TypeScript，支持文件管理、终端、权限控制
+5. **Skills 系统** — 3 个全局 Skill + 20+ 可选 Skill，深度控制 AI 行为和风格
+6. **数据分析** — Token 消耗统计、执行历史可视化、模型使用分布
 
 只需输入一行需求，NexusFlow 就能自动：
 - 解析需求并生成可执行的 DAG 工作流
@@ -41,15 +44,18 @@ NexusFlow 是一个**AI 多模型协作任务引擎**，提供多轮对话、任
 
 ## ✨ 核心特性
 
-- **多轮 AI 对话** — 独立聊天页面，多会话管理，SSE 流式输出，上下文记忆
+- **多轮 AI 对话** — 独立聊天页面，多会话管理，SSE 流式输出，上下文记忆，文件上传
+- **Agent 团队** — 3 Agent 流水线（分析→执行→审查），自然语言驱动，实时协作状态
+- **Skills 系统** — 全局 Skill 始终生效 + 会话/消息级 Skill 灵活切换，深度控制 AI 行为
+- **代码沙箱** — CodeMirror 编辑器，在线执行 Python/JS/TS，SSE 流式输出，文件上传下载
+- **权限控制** — 9 种内置权限模板，支持联网/文件/子进程/终端/Import 白黑名单
 - **任务↔对话联动** — 任务完成后可"继续对话"将上下文带入聊天，迭代优化结果
 - **智能任务解析** — 自然语言输入，AI 自动拆解为 DAG 工作流
-- **多 Agent 协作** — 内置 5 种专业 Agent：需求分析 / 代码生成 / 代码审查 / 自动修复 / 报告生成
 - **并行执行引擎** — 基于拓扑排序的 DAG 引擎，支持节点级并行
 - **多模型支持** — 兼容 DeepSeek / OpenAI / GPT 等所有 OpenAI 格式 API
 - **Token 消耗统计** — 实时追踪 AI 调用成本，可视化分析面板
 - **8 个内置模板** — 覆盖代码工厂、内容创作、数据处理、测试生成等场景
-- **玻璃拟态 UI** — 暗色主题 + Indigo-Purple 渐变 + 玻璃拟态效果
+- **玻璃拟态 UI** — 暗色/浅色双主题 + Indigo-Purple 渐变 + 玻璃拟态效果
 - **Mock 模式** — 零配置启动，所有 API 返回模拟数据，适合演示和开发
 - **CORS 代理** — 内置 Vite 开发代理，无需后端即可直连外部 AI API
 
@@ -112,15 +118,30 @@ python run.py
 - 多会话管理（新建、切换、删除）
 - SSE 流式输出，打字机效果
 - 完整上下文记忆，多轮追问
-- 自适应输入框（Enter 发送 / Shift+Enter 换行）
+- 文件/图片上传支持
+- Skill 选择器（会话级 + 消息级）
+- Agent 模式切换
 
-### 任务 (Tasks)
-- 任务创建、执行、查看详情
-- 实时进度显示
-- 执行报告查看
-- **继续对话** — 将任务结果带入聊天继续迭代
-- **重新执行** — 一键重新运行
-- **删除** — 清理不需要的任务
+### Agent 团队 (Agents)
+- 3 Agent 流水线协作（分析→执行→审查）
+- 自然语言驱动的任务分工
+- 实时协作状态可视化
+- 内置 Agent 角色定义
+
+### 代码沙箱 (Sandbox)
+- CodeMirror 6 编辑器，支持 Python/JS/TS/Bash
+- SSE 流式执行输出
+- 文件树管理（创建/删除/预览）
+- 文件上传下载
+- 终端命令执行
+- 9 种内置权限模板（隔离/数据分析/网络/开发/全能等）
+- Import 白黑名单强制执行
+
+### Skills 系统
+- 3 个全局 Skill（核心助手/推理框架/简洁输出），始终生效
+- 20+ 可选 Skill，覆盖开发/代码/设计/创作/分析/研究/自动化/数据/文档
+- 会话级 + 消息级灵活切换
+- 深度 Agent 集成，影响 AI 行为和风格
 
 ### 工作流 (Workflows)
 - 可视化 DAG 编辑器（React Flow）
@@ -180,10 +201,18 @@ python run.py
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/v1/workflows` | 获取所有工作流模板 |
-| `POST` | `/api/v1/tasks` | 创建新任务 |
-| `POST` | `/api/v1/tasks/{id}/execute` | 执行任务 |
+| `POST` | `/api/v1/chat` | AI 对话（SSE 流式） |
+| `POST` | `/api/v1/sandbox/execute` | 执行代码 |
+| `POST` | `/api/v1/sandbox/execute/stream` | 流式执行代码（SSE） |
+| `POST` | `/api/v1/sandbox/terminal` | 执行终端命令 |
+| `POST` | `/api/v1/sandbox/workspace` | 创建工作空间 |
+| `POST` | `/api/v1/sandbox/workspace/file/upload` | 上传文件 |
+| `GET` | `/api/v1/sandbox/workspace/file/download` | 下载文件 |
+| `GET` | `/api/v1/sandbox/permissions` | 获取权限模板 |
+| `POST` | `/api/v1/sandbox/permissions` | 创建权限模板 |
 | `GET` | `/api/v1/agents` | 获取 Agent 列表 |
+| `POST` | `/api/v1/agents/orchestrate` | Agent 团队协作 |
+| `GET` | `/api/v1/workflows` | 获取所有工作流模板 |
 | `GET` | `/api/v1/analytics/summary` | 统计摘要 |
 
 ## ⚙️ 配置说明
@@ -214,6 +243,7 @@ PORT=8000
 - **React Flow** — 工作流 DAG 可视化
 - **Recharts** — 数据图表
 - **Zustand** — 轻量状态管理（含 localStorage 持久化）
+- **CodeMirror 6** — 轻量代码编辑器
 - **Lucide React** — 图标库
 
 ### 后端
@@ -228,23 +258,22 @@ PORT=8000
 nexusflow/
 ├── backend/
 │   ├── app/
-│   │   ├── api/          # API 路由 (tasks, workflows, agents, analytics)
-│   │   ├── core/         # 核心引擎 (task_parser, workflow_engine, model_router)
-│   │   ├── models/       # Pydantic 数据模型
+│   │   ├── api/          # API 路由 (chat, sandbox, agents, workflows, analytics, permissions)
+│   │   ├── core/         # 核心引擎 (sandbox, permissions, agent_orchestrator, workflow_engine)
 │   │   ├── services/     # 服务层 (ai_service, storage_service)
 │   │   └── main.py       # FastAPI 入口
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── chat/     # 聊天组件 (ChatMessage, ChatInput, ChatSidebar)
+│   │   │   ├── chat/     # 聊天组件 (ChatMessage, ChatInput, SandboxPanel)
+│   │   │   ├── sandbox/  # 沙箱组件 (CodeEditor, FileTree, OutputPanel, SandboxLayout, PermissionEditor)
 │   │   │   ├── layout/   # 布局组件 (MainLayout, Sidebar, Header)
-│   │   │   ├── task/     # 任务组件 (TaskDetailModal)
-│   │   │   └── ui/       # 通用 UI 组件 (Toast 等)
-│   │   ├── pages/        # 页面 (Chat, Home, Workflows, Tasks, Analytics, Settings)
-│   │   ├── stores/       # Zustand 状态管理 (chatStore, taskStore, settingsStore, workflowStore)
+│   │   │   └── ui/       # 通用 UI 组件 (Toast, ProgressBar 等)
+│   │   ├── pages/        # 页面 (Chat, Home, Sandbox, Skills, Agents, Workflows, Analytics, Settings)
+│   │   ├── stores/       # Zustand 状态管理 (chatStore, sandboxStore, skillStore, agentStore, workflowStore)
 │   │   ├── services/     # API & Mock 数据服务
-│   │   ├── types/        # TypeScript 类型定义
+│   │   ├── types/        # TypeScript 类型定义 (sandbox/, skill, agent)
 │   │   └── lib/          # 工具函数 & 常量
 │   └── package.json
 └── README.md

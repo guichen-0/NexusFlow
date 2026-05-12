@@ -1,7 +1,10 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import datetime
 import uuid
+import asyncio
 
 router = APIRouter()
 
@@ -172,3 +175,73 @@ async def delete_workflow(workflow_id: str):
         del workflows_db[workflow_id]
         return {"message": "Workflow deleted"}
     raise HTTPException(status_code=404, detail="Workflow not found")
+
+
+# ========== 工作流执行 ==========
+
+class ExecuteWorkflowRequest(BaseModel):
+    task: str
+    api_key: str = ""
+    api_base_url: str = ""
+    api_format: str = "openai"
+    model: str = ""
+
+
+@router.post("/{workflow_id}/execute")
+async def execute_workflow(workflow_id: str, request: ExecuteWorkflowRequest):
+    """执行工作流 — SSE 流式返回每个节点的执行状态"""
+    # 查找工作流
+    workflow = None
+    for w in DEFAULT_WORKFLOWS:
+        if w["id"] == workflow_id:
+            workflow = w
+            break
+    if not workflow:
+        workflow = workflows_db.get(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    if not request.task.strip():
+        raise HTTPException(status_code=400, detail="任务描述不能为空")
+
+    nodes = workflow["nodes"]
+
+    async def event_stream():
+        import json
+        # 发送工作流信息
+        yield "data: " + json.dumps({"type": "workflow_start", "workflow_id": workflow_id, "name": workflow["name"], "node_count": len(nodes)}) + "\n\n"
+
+        # 拓扑排序
+        from app.core.workflow_engine import WorkflowEngine
+        engine = WorkflowEngine()
+        levels = engine.topological_sort(nodes)
+        node_map = {n["id"]: n for n in nodes}
+
+        # 逐层执行
+        for level_idx, level in enumerate(levels):
+            for node_id in level:
+                node = node_map[node_id]
+                yield "data: " + json.dumps({"type": "node_start", "node_id": node_id, "label": node["label"], "level": level_idx}) + "\n\n"
+
+                # 模拟节点执行（真实场景会调用 AI API）
+                await asyncio.sleep(0.5)
+
+                # 节点完成
+                yield "data: " + json.dumps({"type": "node_complete", "node_id": node_id, "output": node["label"] + "完成", "tokens": {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}}) + "\n\n"
+
+            # 层级间间隔
+            if level_idx < len(levels) - 1:
+                await asyncio.sleep(0.3)
+
+        yield "data: " + json.dumps({"type": "workflow_complete", "total_tokens": {"prompt_tokens": len(nodes) * 100, "completion_tokens": len(nodes) * 50, "total_tokens": len(nodes) * 150}}) + "\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

@@ -13,10 +13,13 @@ export default function Chat() {
     activeSessionId,
     isLoading,
     streamingContent,
+    streamingThinkingContent,
+    agentMode,
     createSession,
     switchSession,
     deleteSession,
     sendMessage,
+    setAgentMode,
   } = useChatStore()
 
   const { panelOpen, togglePanel } = useSandboxStore()
@@ -31,8 +34,8 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingContent])
 
-  const handleSend = useCallback((content: string) => {
-    sendMessage(content)
+  const handleSend = useCallback((content: string, files?: { name: string; type: string; content?: string; path?: string }[], messageSkillId?: string | null) => {
+    sendMessage(content, files, messageSkillId)
   }, [sendMessage])
 
   const handleNewChat = () => {
@@ -71,7 +74,7 @@ export default function Chat() {
               NexusFlow 聊天助手
             </h3>
             <p className="text-sm text-text-secondary max-w-sm">
-              选择一个已有对话，或开始新对话。支持多轮对话，AI 会记住上下文。
+              选择一个已有对话，或开始新对话。支持多轮对话和 Agent 团队协作。
             </p>
             <button
               onClick={handleNewChat}
@@ -117,24 +120,29 @@ export default function Chat() {
                   role={msg.role === 'assistant' ? 'assistant' : 'user'}
                   content={msg.content}
                   executions={msg.executions}
+                  thinkingContent={msg.thinkingContent}
+                  agentPipeline={msg.agentPipeline}
+                  isAgentResult={msg.isAgentResult}
                 />
               ))}
 
-              {isLoading && streamingContent && (
+              {isLoading && (streamingContent || streamingThinkingContent) && (
                 <ChatMessageComponent
                   role="assistant"
                   content={streamingContent}
                   isStreaming
+                  thinkingContent={streamingThinkingContent}
+                  isThinkingStreaming={!!streamingThinkingContent && !streamingContent}
                 />
               )}
 
-              {isLoading && !streamingContent && (
+              {isLoading && !streamingContent && !streamingThinkingContent && (
                 <div className="flex gap-3 px-4 py-3">
                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                     <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                   </div>
                   <div className="bg-surface-2 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm text-text-muted">
-                    正在思考...
+                    {agentMode ? '🤖 Agent 团队准备中...' : '正在思考...'}
                   </div>
                 </div>
               )}
@@ -142,7 +150,12 @@ export default function Chat() {
               <div ref={messagesEndRef} />
             </div>
 
-            <ChatInput onSend={handleSend} isLoading={isLoading} />
+            <ChatInput
+              onSend={handleSend}
+              isLoading={isLoading}
+              agentMode={agentMode}
+              onToggleAgentMode={setAgentMode}
+            />
           </>
         )}
       </div>

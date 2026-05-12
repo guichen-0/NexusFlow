@@ -1,58 +1,122 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   Terminal, Plus, Trash2, FolderOpen, Clock, Shield,
-  CheckCircle, XCircle, AlertTriangle, Play, RefreshCw,
-  Code2, Globe, HardDrive, Cpu, Monitor, FolderSync,
-  Edit3, Search,
+  CheckCircle, XCircle, AlertTriangle, Play, Square, RefreshCw,
+  Code2, Globe, HardDrive, Cpu, FolderSync, Settings,
+  ChevronDown, Edit3, FileCode, FolderUp, Upload, Download,
 } from 'lucide-react'
 import { useSandboxStore } from '../stores/sandboxStore'
+import CodeEditor from '../components/sandbox/CodeEditor'
+import FileTree from '../components/sandbox/FileTree'
+import OutputPanel from '../components/sandbox/OutputPanel'
+import SandboxLayout from '../components/sandbox/SandboxLayout'
 import PermissionEditor from '../components/sandbox/PermissionEditor'
-import FolderPicker from '../components/sandbox/FolderPicker'
 import type { Permission, ExecutionRecord } from '../types/sandbox'
-import { apiCreatePermission, apiUpdatePermission, apiDeletePermission } from '../types/sandbox'
+import {
+  apiCreatePermission, apiUpdatePermission, apiDeletePermission,
+  apiWriteFile, apiReadFile, apiDeleteFile,
+} from '../types/sandbox'
 
-type Tab = 'workspaces' | 'executions' | 'permissions' | 'terminal'
+type Language = 'python' | 'javascript' | 'typescript' | 'bash'
 
-// 权限分类
-  // 权限分类（内置模板）
-  const PERM_CATEGORIES: Record<string, { label: string; icon: any; ids: string[] }> = {
-    basic: { label: '基础', icon: Shield, ids: ['isolated'] },
-    data: { label: '数据', icon: HardDrive, ids: ['data-analysis', 'machine-learning'] },
-    network: { label: '网络', icon: Globe, ids: ['web-request', 'web-scraping'] },
-    dev: { label: '开发', icon: Code2, ids: ['frontend-dev', 'terminal', 'dev-tools'] },
-    full: { label: '全能', icon: Cpu, ids: ['full-access'] },
-  }
+const LANGUAGE_LABELS: Record<Language, string> = {
+  python: 'Python',
+  javascript: 'JavaScript',
+  typescript: 'TypeScript',
+  bash: 'Bash',
+}
+
+const LANGUAGE_EXTENSIONS: Record<Language, string[]> = {
+  python: ['.py'],
+  javascript: ['.js', '.jsx'],
+  typescript: ['.ts', '.tsx'],
+  bash: ['.sh', '.bash'],
+}
+
+const DEFAULT_CODE: Record<Language, string> = {
+  python: `# Python 示例
+import sys
+
+def main():
+    name = "NexusFlow"
+    print(f"Hello, {name}!")
+    print(f"Python version: {sys.version}")
+
+if __name__ == "__main__":
+    main()
+`,
+  javascript: `// JavaScript 示例
+function main() {
+  const name = "NexusFlow";
+  console.log(\`Hello, \${name}!\`);
+  console.log(\`Node version: \${process.version}\`);
+}
+
+main();
+`,
+  typescript: `// TypeScript 示例
+interface Greeting {
+  name: string;
+  message: string;
+}
+
+function createGreeting(name: string): Greeting {
+  return {
+    name,
+    message: \`Hello, \${name}!\`,
+  };
+}
+
+const greeting = createGreeting("NexusFlow");
+console.log(greeting.message);
+`,
+  bash: `#!/bin/bash
+# Bash 示例
+echo "Hello, NexusFlow!"
+echo "Current date: $(date)"
+echo "Working directory: $(pwd)"
+`,
+}
+
+const PERM_CATEGORIES: Record<string, { label: string; icon: any; ids: string[] }> = {
+  basic: { label: '基础', icon: Shield, ids: ['isolated'] },
+  data: { label: '数据', icon: HardDrive, ids: ['data-analysis', 'machine-learning'] },
+  network: { label: '网络', icon: Globe, ids: ['web-request', 'web-scraping'] },
+  dev: { label: '开发', icon: Code2, ids: ['frontend-dev', 'terminal', 'dev-tools'] },
+  full: { label: '全能', icon: Cpu, ids: ['full-access'] },
+}
 
 export default function Sandbox() {
   const {
     workspaces, executions, permissions,
     createWorkspace, deleteWorkspace, fetchExecutions, fetchPermissions,
-    refreshWorkspace, executeCode, executeTerminal, activeWorkspaceId,
-    setActiveWorkspace,
+    refreshWorkspace, executeCode, executeCodeStream,
+    uploadFile, downloadFile,
+    activeWorkspaceId, setActiveWorkspace,
+    lastResult, isExecuting,
   } = useSandboxStore()
 
-  const [activeTab, setActiveTab] = useState<Tab>('workspaces')
-  const [expandedWorkspace, setExpandedWorkspace] = useState<string | null>(null)
+  const [code, setCode] = useState(DEFAULT_CODE.python)
+  const [language, setLanguage] = useState<Language>('python')
+  const [activeFile, setActiveFile] = useState<string | null>(null)
+  const [showPermissions, setShowPermissions] = useState(false)
+  const [showCreateWs, setShowCreateWs] = useState(false)
   const [showPermEditor, setShowPermEditor] = useState(false)
   const [editingPerm, setEditingPerm] = useState<Permission | null>(null)
   const [editingPermIsCopy, setEditingPermIsCopy] = useState(false)
-  const [newWsPerm, setNewWsPerm] = useState('')
   const [error, setError] = useState('')
-  const [permLoading, setPermLoading] = useState(true)
-
-  // 挂载本地目录状态
-  const [showMountInput, setShowMountInput] = useState(false)
   const [localPath, setLocalPath] = useState('')
   const [isMounting, setIsMounting] = useState(false)
-  const [showFolderPicker, setShowFolderPicker] = useState(false)
+  const [newWsPerm, setNewWsPerm] = useState('')
+  const [showWsDropdown, setShowWsDropdown] = useState(false)
+  const dirInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // 终端状态
-  const [termInput, setTermInput] = useState('')
-  const [termHistory, setTermHistory] = useState<string[]>([])
-  const [termHistoryIdx, setTermHistoryIdx] = useState(-1)
-  const [isTermRunning, setIsTermRunning] = useState(false)
+  const activeWorkspace = useMemo(
+    () => workspaces.find(w => w.id === activeWorkspaceId),
+    [workspaces, activeWorkspaceId]
+  )
 
-  // 动态权限分类：内置 + 自定义
   const allPermCategories = useMemo(() => {
     const cats: Record<string, { label: string; icon: any; ids: string[] }> = { ...PERM_CATEGORIES }
     const customPerms = permissions.filter(p => !p.is_builtin)
@@ -63,621 +127,447 @@ export default function Sandbox() {
   }, [permissions])
 
   useEffect(() => {
-    setPermLoading(true)
-    Promise.all([
-      fetchExecutions(),
-      fetchPermissions(),
-    ])
-      .catch(() => setError('无法连接后端服务'))
-      .finally(() => setPermLoading(false))
+    Promise.all([fetchExecutions(), fetchPermissions()]).catch(() => {})
   }, [])
+
+  const ensureWorkspace = useCallback(async () => {
+    if (!activeWorkspaceId) {
+      const ws = await createWorkspace()
+      return ws.id
+    }
+    return activeWorkspaceId
+  }, [activeWorkspaceId, createWorkspace])
+
+  const handleRun = useCallback(async () => {
+    setError('')
+    try {
+      const wsId = await ensureWorkspace()
+      await executeCodeStream(code, language, {}, { workspaceId: wsId })
+    } catch (e: any) {
+      setError(e.message)
+    }
+  }, [code, language, ensureWorkspace, executeCodeStream])
+
+  const handleLanguageChange = (lang: Language) => {
+    setLanguage(lang)
+    if (!activeFile) setCode(DEFAULT_CODE[lang])
+  }
+
+  const handleCreateFile = async (name: string) => {
+    try {
+      const wsId = await ensureWorkspace()
+      await apiWriteFile(wsId, name, '')
+      await refreshWorkspace(wsId)
+      setActiveFile(name)
+      setCode('')
+      const ext = '.' + name.split('.').pop()
+      const lang = (Object.entries(LANGUAGE_EXTENSIONS).find(([, exts]) => exts.includes(ext))?.[0] as Language) || language
+      setLanguage(lang)
+    } catch (e: any) { setError(e.message) }
+  }
+
+  const handleDeleteFile = async (path: string) => {
+    if (!activeWorkspaceId) return
+    if (!confirm(`确定删除 ${path}？`)) return
+    try {
+      await apiDeleteFile(activeWorkspaceId, path)
+      await refreshWorkspace(activeWorkspaceId)
+      if (activeFile === path) { setActiveFile(null); setCode(DEFAULT_CODE[language]) }
+    } catch (e: any) { setError(e.message) }
+  }
+
+  const handleSelectFile = async (path: string) => {
+    if (!activeWorkspaceId) return
+    try {
+      const result = await apiReadFile(activeWorkspaceId, path)
+      setCode(result.content)
+      setActiveFile(path)
+      const ext = '.' + path.split('.').pop()
+      const lang = (Object.entries(LANGUAGE_EXTENSIONS).find(([, exts]) => exts.includes(ext))?.[0] as Language)
+      if (lang) setLanguage(lang)
+    } catch (e: any) { setError(e.message) }
+  }
+
+  const handleSaveFile = async () => {
+    if (!activeWorkspaceId || !activeFile) return
+    try { await apiWriteFile(activeWorkspaceId, activeFile, code) } catch (e: any) { setError(e.message) }
+  }
+
+  const handleUploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || !activeWorkspaceId) return
+    for (const file of Array.from(files)) {
+      try {
+        await uploadFile(activeWorkspaceId, file)
+      } catch (err: any) { setError(err.message) }
+    }
+    e.target.value = ''
+  }
+
+  const handleDownloadFile = async () => {
+    if (!activeWorkspaceId || !activeFile) return
+    try {
+      const blob = await downloadFile(activeWorkspaceId, activeFile)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = activeFile.split(/[/\\]/).pop() || activeFile
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) { setError(e.message) }
+  }
 
   const handleCreateWorkspace = async () => {
     setError('')
     try {
       await createWorkspace({ permissionId: newWsPerm || undefined, type: 'virtual' })
-      setNewWsPerm('')
-    } catch (e: any) {
-      setError(e.message)
-    }
+      setNewWsPerm(''); setShowCreateWs(false)
+    } catch (e: any) { setError(e.message) }
+  }
+
+  const handleDirSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Extract directory path from webkitRelativePath
+    const relPath = (file as any).webkitRelativePath || file.name
+    const dirName = relPath.split('/')[0]
+    // We need the absolute path — use the directory input's webkitdirectory trick
+    // The browser gives us relative paths, so we use the path input as fallback
+    // For native directory pick, we send the directory name and let the backend resolve
+    setLocalPath(dirName)
+    e.target.value = ''
   }
 
   const handleMountLocal = async () => {
     const path = localPath.trim()
     if (!path) return
-    setError('')
-    setIsMounting(true)
+    setError(''); setIsMounting(true)
     try {
       await createWorkspace({ permissionId: newWsPerm || undefined, type: 'local', path })
-      setLocalPath('')
-      setShowMountInput(false)
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setIsMounting(false)
-    }
-  }
-
-  const handleFolderSelect = () => {
-    setShowFolderPicker(true)
-  }
-
-  const handleFolderPick = async (path: string) => {
-    setShowFolderPicker(false)
-    setLocalPath(path)
-    setError('')
-    setIsMounting(true)
-    try {
-      await createWorkspace({ permissionId: newWsPerm || undefined, type: 'local', path })
-      setLocalPath('')
-      setShowMountInput(false)
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setIsMounting(false)
-    }
+      setLocalPath(''); setShowCreateWs(false)
+    } catch (e: any) { setError(e.message) } finally { setIsMounting(false) }
   }
 
   const handleDeleteWorkspace = async (id: string) => {
     const ws = workspaces.find(w => w.id === id)
-    const msg = ws?.type === 'local'
-      ? '确定解除此本地目录的绑定？（物理目录不会被删除）'
-      : '确定删除此虚拟工作空间？所有文件将被清除。'
+    const msg = ws?.type === 'local' ? '确定解除此本地目录的绑定？' : '确定删除此虚拟工作空间？'
     if (!confirm(msg)) return
-    setError('')
-    try {
-      await deleteWorkspace(id)
-      if (expandedWorkspace === id) setExpandedWorkspace(null)
-    } catch (e: any) {
-      setError(e.message)
-    }
-  }
-
-  const handleTermKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      const nextIdx = termHistoryIdx < termHistory.length - 1 ? termHistoryIdx + 1 : termHistoryIdx
-      setTermHistoryIdx(nextIdx)
-      if (nextIdx >= 0) setTermInput(termHistory[termHistory.length - 1 - nextIdx])
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      const nextIdx = termHistoryIdx > 0 ? termHistoryIdx - 1 : -1
-      setTermHistoryIdx(nextIdx)
-      if (nextIdx >= 0) setTermInput(termHistory[termHistory.length - 1 - nextIdx])
-      else setTermInput('')
-    } else if (e.key === 'Enter') {
-      handleRunTerminal()
-    }
-  }, [termInput, termHistory, termHistoryIdx])
-
-  const handleRunTerminal = async () => {
-    const cmd = termInput.trim()
-    if (!cmd) return
-    setError('')
-    setIsTermRunning(true)
-    setTermHistory(prev => [...prev, cmd])
-    setTermHistoryIdx(-1)
-    setTermInput('')
-    try {
-      if (!activeWorkspaceId) {
-        await createWorkspace()
-      }
-      await executeTerminal(cmd)
-    } catch (e: any) {
-      setError(e.message)
-    } finally {
-      setIsTermRunning(false)
-    }
+    try { await deleteWorkspace(id); setShowWsDropdown(false) } catch (e: any) { setError(e.message) }
   }
 
   const handleCreatePermission = async (data: Partial<Permission>) => {
-    try {
-      await apiCreatePermission(data)
-      await fetchPermissions()
-      setShowPermEditor(false)
-      setEditingPerm(null)
-      setEditingPermIsCopy(false)
-    } catch (e: any) {
-      setError(e.message)
-    }
+    try { await apiCreatePermission(data); await fetchPermissions(); setShowPermEditor(false); setEditingPerm(null) } catch (e: any) { setError(e.message) }
   }
-
   const handleEditPermission = async (data: Partial<Permission>) => {
     if (!editingPerm) return
-    try {
-      await apiUpdatePermission(editingPerm.id, data)
-      await fetchPermissions()
-      setShowPermEditor(false)
-      setEditingPerm(null)
-      setEditingPermIsCopy(false)
-    } catch (e: any) {
-      setError(e.message)
-    }
+    try { await apiUpdatePermission(editingPerm.id, data); await fetchPermissions(); setShowPermEditor(false); setEditingPerm(null) } catch (e: any) { setError(e.message) }
   }
-
   const handleDeletePermission = async (id: string) => {
     if (!confirm('确定删除此权限模板？')) return
-    try {
-      await apiDeletePermission(id)
-      await fetchPermissions()
-    } catch (e: any) {
-      setError(e.message)
-    }
+    try { await apiDeletePermission(id); await fetchPermissions() } catch (e: any) { setError(e.message) }
   }
-
-  const openPermEditor = (perm: Permission) => {
-    setEditingPerm(perm)
-    setEditingPermIsCopy(perm.is_builtin)
-    setShowPermEditor(true)
-  }
-
-  const formatBytes = (bytes: number) => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
-  // 工作空间显示名称
-  const getWsDisplayName = (ws: { id: string; path: string; type: string }) => {
-    if (ws.type === 'local') {
-      return ws.path.split(/[/\\]/).filter(Boolean).pop() || ws.path
-    }
-    return ws.id.slice(0, 12)
-  }
-
-  const tabs: { key: Tab; label: string; icon: any; count: number }[] = [
-    { key: 'workspaces', label: '工作空间', icon: FolderOpen, count: workspaces.length },
-    { key: 'executions', label: '执行历史', icon: Clock, count: executions.length },
-    { key: 'permissions', label: '权限模板', icon: Shield, count: permissions.length },
-    { key: 'terminal', label: '终端', icon: Terminal, count: executions.filter(e => e.language === 'terminal').length },
-  ]
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Terminal className="w-5 h-5 text-primary" />
+    <div className="h-[calc(100vh-4rem)] flex flex-col bg-background relative">
+      {/* Top bar — glass effect, z-20 so dropdowns render above CodeMirror */}
+      <div className="shrink-0 flex items-center gap-3 px-4 py-2.5 border-b border-border/50 glass relative z-20">
+        {/* Logo */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20">
+            <Terminal className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-text-primary">沙箱管理</h1>
-            <p className="text-sm text-text-secondary">代码执行环境、工作空间、权限和终端</p>
-          </div>
+          <span className="text-sm font-bold gradient-text hidden sm:block">Sandbox</span>
         </div>
-        <div className="flex gap-2">
-          <div className="flex items-center gap-3 text-xs text-text-muted mr-4">
-            <span>{workspaces.length} 工作空间</span>
-            <span>{executions.length} 执行</span>
-          </div>
-          <button
-            onClick={() => setShowMountInput(!showMountInput)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-surface-2 border border-border-tertiary rounded-xl text-sm text-text-primary hover:bg-surface-3 transition-colors"
-          >
-            <FolderSync className="w-4 h-4" />
-            挂载本地目录
-          </button>
-          <button
-            onClick={handleCreateWorkspace}
-            className="flex items-center gap-1.5 px-3 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            <Plus className="w-4 h-4" />
-            新建虚拟空间
-          </button>
-        </div>
-      </div>
 
-      {/* 错误提示 */}
-      {error && (
-        <div className="flex items-center gap-2 px-4 py-3 bg-danger/10 border border-danger/20 rounded-xl text-xs text-danger">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span className="flex-1">{error}</span>
-          <button onClick={() => setError('')} className="text-danger/60 hover:text-danger">
-            <XCircle className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+        <div className="w-px h-6 bg-border/50" />
 
-      {/* 挂载本地目录输入框 */}
-      {showMountInput && (
-        <div className="bg-surface-2 rounded-xl px-4 py-3 space-y-3">
-          <div className="flex items-center gap-3">
-            <FolderSync className="w-4 h-4 text-primary shrink-0" />
-            <input
-              value={localPath}
-              onChange={(e) => setLocalPath(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleMountLocal()}
-              placeholder="输入本地目录绝对路径，如 F:\MyProject"
-              className="flex-1 bg-surface-1 border border-border-tertiary rounded-lg px-3 py-2 text-sm text-text-primary font-mono focus:outline-none focus:border-primary"
-              autoFocus
-            />
-            <button
-              onClick={handleFolderSelect}
-              className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-surface-1 border border-border-tertiary rounded-lg text-sm text-text-secondary hover:bg-surface-3 hover:border-primary/50 transition-colors"
-            >
-              <Search className="w-3.5 h-3.5" />
-              浏览
-            </button>
-            {permLoading ? (
-              <span className="text-xs text-text-muted">加载中...</span>
-            ) : (
-              <select
-                value={newWsPerm}
-                onChange={(e) => setNewWsPerm(e.target.value)}
-                className="bg-surface-1 border border-border-tertiary rounded-lg px-2 py-1 text-xs text-text-secondary focus:outline-none focus:border-primary"
-              >
-                <option value="">默认权限</option>
-                {permissions.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            )}
-            <button
-              onClick={handleMountLocal}
-              disabled={isMounting || !localPath.trim()}
-              className="shrink-0 px-3 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 transition-opacity"
-            >
-              {isMounting ? '挂载中...' : '挂载'}
-            </button>
-            <button
-              onClick={() => { setShowMountInput(false); setLocalPath('') }}
-              className="text-text-tertiary hover:text-text-secondary transition-colors"
-            >
-              <XCircle className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 切换 */}
-      <div className="flex gap-1 bg-surface-2 rounded-xl p-1">
-        {tabs.map(tab => (
+        {/* Workspace selector */}
+        <div className="relative">
           <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm transition-colors ${
-              activeTab === tab.key
-                ? 'bg-surface-1 text-text-primary shadow-sm'
-                : 'text-text-tertiary hover:text-text-secondary'
-            }`}
+            onClick={() => setShowWsDropdown(!showWsDropdown)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm bg-surface-2/80 border border-border/60 hover:border-primary/40 hover:bg-surface-3/50 transition-all duration-200 hover:shadow-sm"
           >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-            <span className={`px-1.5 py-0.5 rounded text-xs ${
-              activeTab === tab.key ? 'bg-primary/10 text-primary' : 'bg-surface-tertiary text-text-muted'
-            }`}>
-              {tab.count}
+            <FolderOpen className="w-3.5 h-3.5 text-primary/70" />
+            <span className="text-text-secondary max-w-[120px] truncate">
+              {activeWorkspace
+                ? (activeWorkspace.type === 'local' ? activeWorkspace.path.split(/[/\\]/).filter(Boolean).pop() : activeWorkspace.id.slice(0, 8))
+                : '选择空间'}
             </span>
+            <ChevronDown className={`w-3 h-3 text-text-muted transition-transform duration-200 ${showWsDropdown ? 'rotate-180' : ''}`} />
           </button>
-        ))}
-      </div>
 
-      {/* ==================== 工作空间 Tab ==================== */}
-      {activeTab === 'workspaces' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {workspaces.length === 0 && (
-            <div className="col-span-full text-center py-12 text-text-muted text-sm">
-              暂无工作空间，点击上方按钮新建虚拟空间或挂载本地目录
-            </div>
-          )}
-          {workspaces.map(ws => {
-            const isExpanded = expandedWorkspace === ws.id
-            const isLocal = ws.type === 'local'
-            return (
-              <div
-                key={ws.id}
-                className={`border rounded-xl overflow-hidden hover:border-border-tertiary transition-colors ${
-                  isLocal ? 'border-primary/20 bg-primary/[0.02]' : 'border-border-secondary'
-                }`}
-              >
-                <div
-                  className="px-4 py-3 cursor-pointer flex items-center justify-between"
-                  onClick={() => {
-                    setExpandedWorkspace(isExpanded ? null : ws.id)
-                    if (!isExpanded) refreshWorkspace(ws.id).catch(() => {})
-                  }}
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <FolderOpen className={`w-4 h-4 shrink-0 ${isLocal ? 'text-primary' : 'text-warning'}`} />
-                      <span className="text-sm font-medium text-text-primary truncate">
-                        {getWsDisplayName(ws)}
-                      </span>
-                      <span className={`px-1.5 py-0.5 rounded text-xs shrink-0 ${
-                        isLocal ? 'bg-primary/10 text-primary' : 'bg-surface-tertiary text-text-muted'
-                      }`}>
-                        {isLocal ? '本地' : '虚拟'}
-                      </span>
-                      {ws.permission_name && (
-                        <span className="px-1.5 py-0.5 rounded text-xs bg-primary/10 text-primary shrink-0">
-                          {ws.permission_name}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex gap-3 mt-1 text-xs text-text-muted">
-                      <span>{ws.file_count} 文件</span>
-                      <span>{formatBytes(ws.total_size)}</span>
-                      {isLocal && (
-                        <span className="truncate font-mono" title={ws.path}>{ws.path}</span>
-                      )}
-                    </div>
-                  </div>
-                  <svg
-                    className={`w-4 h-4 text-text-tertiary transition-transform shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-                {isExpanded && (
-                  <div className="px-4 py-3 border-t border-border-tertiary bg-surface-2">
-                    {ws.files.length === 0 ? (
-                      <p className="text-xs text-text-muted">空工作空间</p>
-                    ) : (
-                      <div className="space-y-0.5 max-h-32 overflow-y-auto">
-                        {ws.files.map(f => (
-                          <div key={f} className="text-xs text-text-secondary font-mono">{f}</div>
-                        ))}
-                      </div>
-                    )}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteWorkspace(ws.id) }}
-                      className="mt-2 flex items-center gap-1 text-xs text-danger/70 hover:text-danger transition-colors"
-                    >
+          {showWsDropdown && (
+            <div className="absolute top-full left-0 mt-1.5 w-64 bg-surface/95 backdrop-blur-xl border border-border/60 rounded-xl shadow-2xl shadow-black/30 z-50 py-1 animate-in">
+              {workspaces.length === 0 ? (
+                <div className="px-3 py-5 text-center text-text-muted text-xs">暂无工作空间</div>
+              ) : (
+                workspaces.map(ws => (
+                  <div key={ws.id} className={`flex items-center gap-2 px-3 py-2 cursor-pointer transition-all duration-150 ${ws.id === activeWorkspaceId ? 'bg-primary/10 text-primary' : 'hover:bg-surface-2 text-text-secondary'}`}>
+                    <button onClick={() => { setActiveWorkspace(ws.id); setShowWsDropdown(false) }} className="flex-1 flex items-center gap-2 text-left">
+                      <FolderOpen className={`w-3.5 h-3.5 shrink-0 ${ws.type === 'local' ? 'text-primary' : 'text-warning'}`} />
+                      <span className="text-sm truncate">{ws.type === 'local' ? ws.path.split(/[/\\]/).filter(Boolean).pop() : ws.id.slice(0, 8)}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${ws.type === 'local' ? 'bg-primary/15 text-primary' : 'bg-warning/10 text-warning'}`}>{ws.type === 'local' ? '本地' : '虚拟'}</span>
+                    </button>
+                    <button onClick={(e) => { e.stopPropagation(); handleDeleteWorkspace(ws.id) }} className="p-1 text-text-muted hover:text-danger transition-colors opacity-0 group-hover:opacity-100">
                       <Trash2 className="w-3 h-3" />
-                      {isLocal ? '解除绑定' : '删除工作空间'}
                     </button>
                   </div>
-                )}
+                ))
+              )}
+              <div className="border-t border-border/50 mt-1 pt-1">
+                <button onClick={() => { setShowCreateWs(true); setShowWsDropdown(false) }} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-primary hover:bg-primary/5 transition-colors">
+                  <Plus className="w-3.5 h-3.5" /> 新建工作空间
+                </button>
               </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* ==================== 执行历史 Tab ==================== */}
-      {activeTab === 'executions' && (
-        <div>
-          {executions.length === 0 ? (
-            <div className="text-center py-12 text-text-muted text-sm">
-              暂无执行记录
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {executions.map((exec, idx) => (
-                <div
-                  key={exec.id || idx}
-                  className="flex items-center gap-4 px-4 py-3 border border-border-secondary rounded-xl hover:border-border-tertiary transition-colors"
-                >
-                  <div className="shrink-0">
-                    {exec.timed_out ? (
-                      <AlertTriangle className="w-5 h-5 text-warning" />
-                    ) : exec.success ? (
-                      <CheckCircle className="w-5 h-5 text-success" />
-                    ) : (
-                      <XCircle className="w-5 h-5 text-danger" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-medium text-text-primary ${
-                        exec.language === 'terminal' ? 'font-mono' : ''
-                      }`}>
-                        {exec.language === 'terminal' ? '$' : ''} {exec.language}
-                      </span>
-                      {exec.permission_name && (
-                        <span className="px-1.5 py-0.5 rounded text-xs bg-primary/10 text-primary">
-                          {exec.permission_name}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-xs text-text-muted font-mono truncate mt-0.5">
-                      {exec.code.slice(0, 100)}{exec.code.length > 100 ? '...' : ''}
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <div className="text-xs text-text-secondary">{exec.duration_ms}ms</div>
-                    <div className="text-xs text-text-muted">{new Date(exec.executed_at).toLocaleTimeString()}</div>
-                  </div>
-                </div>
-              ))}
             </div>
           )}
         </div>
-      )}
 
-      {/* ==================== 权限管理 Tab ==================== */}
-      {activeTab === 'permissions' && (
-        <div>
-          <div className="flex justify-end mb-4">
+        {/* Language selector */}
+        <div className="flex items-center bg-surface-2/60 rounded-xl border border-border/40 p-0.5">
+          {(Object.keys(LANGUAGE_LABELS) as Language[]).map(lang => (
             <button
-              onClick={() => { setEditingPerm(null); setEditingPermIsCopy(false); setShowPermEditor(true) }}
-              className="flex items-center gap-1.5 px-3 py-2 bg-surface-2 border border-border-tertiary rounded-xl text-sm text-text-primary hover:bg-surface-3 transition-colors"
+              key={lang}
+              onClick={() => handleLanguageChange(lang)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all duration-200 ${
+                language === lang
+                  ? 'bg-primary text-white shadow-md shadow-primary/25'
+                  : 'text-text-muted hover:text-text-secondary hover:bg-surface-3/50'
+              }`}
             >
-              <Plus className="w-4 h-4" />
-              自定义权限
+              {LANGUAGE_LABELS[lang]}
             </button>
-          </div>
+          ))}
+        </div>
 
-          {permLoading ? (
-            <div className="text-center py-12 text-text-muted text-sm">加载权限模板中...</div>
+        <div className="w-px h-6 bg-border/50" />
+
+        {/* Run button — glow effect */}
+        <button
+          onClick={handleRun}
+          disabled={isExecuting}
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-primary to-accent text-white hover:shadow-lg hover:shadow-primary/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100 transition-all duration-200"
+        >
+          {isExecuting ? (
+            <><Square className="w-3.5 h-3.5" /> 执行中</>
           ) : (
-            Object.entries(allPermCategories).map(([catKey, cat]) => {
-              const catPerms = permissions.filter(p => cat.ids.includes(p.id))
-              if (catPerms.length === 0) return null
-              return (
-                <div key={catKey} className="mb-6">
-                  <div className="flex items-center gap-2 mb-3">
-                    <cat.icon className="w-4 h-4 text-text-muted" />
-                    <span className="text-sm font-medium text-text-secondary">{cat.label}</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {catPerms.map(perm => (
-                      <div
-                        key={perm.id}
-                        className={`border rounded-xl p-4 transition-all hover:shadow-sm ${
-                          perm.is_builtin
-                            ? 'border-border-secondary bg-surface-2'
-                            : 'border-primary/20 bg-primary/5'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Shield className={`w-4 h-4 ${perm.is_builtin ? 'text-text-muted' : 'text-primary'}`} />
-                            <span className="text-sm font-semibold text-text-primary">{perm.name}</span>
-                            {perm.is_builtin && (
-                              <span className="px-1.5 py-0.5 rounded text-xs bg-surface-tertiary text-text-muted">内置</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => openPermEditor(perm)}
-                              className="text-text-tertiary hover:text-primary transition-colors"
-                              title={perm.is_builtin ? '基于此模板创建可编辑副本' : '编辑'}
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            {!perm.is_builtin && (
-                              <button
-                                onClick={() => handleDeletePermission(perm.id)}
-                                className="text-text-tertiary hover:text-danger transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        <p className="text-xs text-text-secondary mb-3">{perm.description}</p>
-
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
-                          {[
-                            { label: '联网', value: perm.allow_network },
-                            { label: '文件读写', value: perm.allow_filesystem },
-                            { label: '子进程', value: perm.allow_subprocess },
-                            { label: '环境变量', value: perm.allow_env_vars },
-                            { label: '终端', value: perm.allow_terminal },
-                          ].map(item => (
-                            <div key={item.label} className="flex items-center gap-1">
-                              {item.value
-                                ? <CheckCircle className="w-3 h-3 text-success" />
-                                : <XCircle className="w-3 h-3 text-text-muted/50" />
-                              }
-                              <span className={item.value ? 'text-text-secondary' : 'text-text-muted/50'}>{item.label}</span>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="flex items-center gap-3 mt-2 text-xs text-text-muted">
-                          <span>超时 {perm.max_timeout}s</span>
-                          <span>内存 {perm.max_memory_mb}MB</span>
-                          <span>{perm.allowed_languages.join(', ')}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            })
+            <><Play className="w-3.5 h-3.5" fill="currentColor" /> 运行</>
           )}
+        </button>
+
+        {activeFile && (
+          <button onClick={handleSaveFile} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm text-text-secondary hover:bg-surface-2 hover:text-primary border border-border/50 transition-all duration-200">
+            保存
+          </button>
+        )}
+
+        {activeFile && (
+          <button onClick={handleDownloadFile} className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-sm text-text-muted hover:bg-surface-2 hover:text-primary transition-all duration-200" title="下载文件">
+            <Download className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-sm text-text-muted hover:bg-surface-2 hover:text-primary transition-all duration-200" title="上传文件">
+          <Upload className="w-3.5 h-3.5" />
+        </button>
+        <input ref={fileInputRef} type="file" multiple onChange={handleUploadFile} className="hidden" />
+
+        <div className="flex-1" />
+
+        {/* Permissions toggle */}
+        <button
+          onClick={() => setShowPermissions(!showPermissions)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm transition-all duration-200 ${
+            showPermissions ? 'bg-primary/10 text-primary border border-primary/20' : 'text-text-muted hover:bg-surface-2 hover:text-text-secondary border border-transparent'
+          }`}
+        >
+          <Shield className="w-4 h-4" />
+          <span className="hidden md:block">权限</span>
+        </button>
+      </div>
+
+      {/* Error bar — slide animation */}
+      {error && (
+        <div className="shrink-0 flex items-center gap-2 px-4 py-2 bg-danger/10 border-b border-danger/20 text-xs text-danger animate-in">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button onClick={() => setError('')} className="text-danger/60 hover:text-danger transition-colors"><XCircle className="w-3.5 h-3.5" /></button>
         </div>
       )}
 
-      {/* ==================== 终端 Tab ==================== */}
-      {activeTab === 'terminal' && (
-        <div className="border border-border-secondary rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-2 bg-surface-2 border-b border-border-tertiary">
-            <div className="flex items-center gap-2">
-              <Terminal className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium text-text-primary">终端</span>
-              {activeWorkspaceId && (
-                <span className="text-xs text-text-muted">
-                  工作空间: {workspaces.find(w => w.id === activeWorkspaceId)?.path?.split(/[/\\]/).pop() || activeWorkspaceId.slice(0, 8)}
-                </span>
+      {/* Main content */}
+      <div className="flex-1 min-h-0 flex">
+        <div className="flex-1 min-w-0">
+          <SandboxLayout
+            sidebar={<FileTree files={activeWorkspace?.files || []} activeFile={activeFile} onSelectFile={handleSelectFile} onCreateFile={handleCreateFile} onDeleteFile={handleDeleteFile} onRefresh={activeWorkspaceId ? () => refreshWorkspace(activeWorkspaceId) : undefined} loading={isExecuting} />}
+            editor={
+              <div className="h-full flex flex-col relative isolate">
+                {activeFile && (
+                  <div className="shrink-0 flex items-center gap-1 px-3 py-1.5 border-b border-border/40 bg-surface/80">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-medium border border-primary/10">
+                      <FileCode className="w-3 h-3" /> {activeFile}
+                    </div>
+                  </div>
+                )}
+                <div className="flex-1 min-h-0">
+                  <CodeEditor value={code} onChange={setCode} language={language} onSubmit={handleRun} placeholder="在此编写代码..." />
+                </div>
+              </div>
+            }
+            output={<OutputPanel result={lastResult} history={executions} isRunning={isExecuting} onSelectHistory={(record) => { setCode(record.code) }} />}
+          />
+        </div>
+
+        {/* Permissions panel — slide-in with glass */}
+        {showPermissions && (
+          <div className="w-80 shrink-0 border-l border-border/40 glass overflow-y-auto animate-in">
+            <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 border-b border-border/40 bg-surface/80 backdrop-blur-md">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold text-text-primary">权限模板</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => { setEditingPerm(null); setEditingPermIsCopy(false); setShowPermEditor(true) }} className="p-1.5 text-text-muted hover:text-primary rounded-lg hover:bg-primary/10 transition-all duration-200" title="新建权限">
+                  <Plus className="w-4 h-4" />
+                </button>
+                <button onClick={() => setShowPermissions(false)} className="p-1.5 text-text-muted hover:text-text-secondary rounded-lg hover:bg-surface-2 transition-all duration-200">
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3 space-y-4">
+              {Object.entries(allPermCategories).map(([catKey, cat]) => {
+                const catPerms = permissions.filter(p => cat.ids.includes(p.id))
+                if (catPerms.length === 0) return null
+                return (
+                  <div key={catKey}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <cat.icon className="w-3.5 h-3.5 text-text-muted" />
+                      <span className="text-xs font-medium text-text-muted uppercase tracking-wider">{cat.label}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {catPerms.map(perm => (
+                        <div key={perm.id} className={`group p-2.5 rounded-xl border transition-all duration-200 ${perm.is_builtin ? 'border-border/60 hover:border-border-2 bg-surface-2/50 hover:shadow-sm' : 'border-primary/20 bg-gradient-to-br from-primary/5 to-accent/5 hover:border-primary/30 hover:shadow-sm hover:shadow-primary/5'}`}>
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm font-medium text-text-primary">{perm.name}</span>
+                              {perm.is_builtin && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-surface-3 text-text-muted font-medium">内置</span>}
+                            </div>
+                            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => { setEditingPerm(perm); setEditingPermIsCopy(perm.is_builtin); setShowPermEditor(true) }} className="p-1 text-text-muted hover:text-primary rounded transition-colors" title={perm.is_builtin ? '基于此创建副本' : '编辑'}>
+                                <Edit3 className="w-3 h-3" />
+                              </button>
+                              {!perm.is_builtin && (
+                                <button onClick={() => handleDeletePermission(perm.id)} className="p-1 text-text-muted hover:text-danger rounded transition-colors"><Trash2 className="w-3 h-3" /></button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-xs text-text-muted mb-1.5 line-clamp-2">{perm.description}</p>
+                          <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[11px]">
+                            {[
+                              { label: '联网', value: perm.allow_network, icon: Globe },
+                              { label: '文件', value: perm.allow_filesystem, icon: FolderOpen },
+                              { label: '子进程', value: perm.allow_subprocess, icon: Cpu },
+                              { label: '终端', value: perm.allow_terminal, icon: Terminal },
+                            ].map(item => (
+                              <span key={item.label} className={`flex items-center gap-0.5 ${item.value ? 'text-success' : 'text-text-muted/40'}`}>
+                                <item.icon className="w-3 h-3" /> {item.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Create workspace modal — glass + animation */}
+      {showCreateWs && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in">
+          <div className="bg-surface/95 backdrop-blur-xl border border-border/60 rounded-2xl w-full max-w-md p-5 space-y-4 shadow-2xl shadow-black/30 animate-in">
+            <h3 className="text-base font-bold gradient-text">新建工作空间</h3>
+
+            <div className="space-y-3">
+              {/* Virtual workspace */}
+              <button onClick={handleCreateWorkspace} className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-border/60 hover:border-warning/40 hover:bg-warning/5 transition-all duration-200 hover:shadow-md hover:shadow-warning/5 text-left group">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-warning/20 to-warning/5 flex items-center justify-center group-hover:scale-110 transition-transform duration-200">
+                  <FolderOpen className="w-5 h-5 text-warning" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-text-primary">虚拟空间</div>
+                  <div className="text-xs text-text-muted">临时目录，关闭后清除</div>
+                </div>
+              </button>
+
+              {/* Local mount — native directory picker */}
+              <div className="border border-border/60 rounded-xl p-3.5 space-y-2.5 hover:border-primary/30 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
+                    <FolderUp className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-text-primary">挂载本地目录</div>
+                    <div className="text-xs text-text-muted">选择本地文件夹作为工作空间</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={localPath}
+                    onChange={(e) => setLocalPath(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleMountLocal()}
+                    placeholder="输入绝对路径或点击浏览"
+                    className="flex-1 bg-surface-2/80 border border-border/50 rounded-lg px-3 py-2 text-sm text-text-primary font-mono focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all duration-200"
+                  />
+                  <input
+                    ref={dirInputRef}
+                    type="file"
+                    // @ts-ignore — webkitdirectory is non-standard
+                    webkitdirectory=""
+                    onChange={handleDirSelect}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => dirInputRef.current?.click()}
+                    className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-surface-2/80 border border-border/50 rounded-lg text-sm text-text-secondary hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all duration-200"
+                  >
+                    <FolderUp className="w-4 h-4" />
+                    浏览
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Permission selector */}
+            <div>
+              <label className="text-xs text-text-muted mb-1.5 block font-medium">权限模板</label>
+              <select value={newWsPerm} onChange={(e) => setNewWsPerm(e.target.value)} className="w-full bg-surface-2/80 border border-border/50 rounded-lg px-3 py-2 text-sm text-text-secondary focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all duration-200">
+                <option value="">默认权限</option>
+                {permissions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button onClick={() => { setShowCreateWs(false); setLocalPath('') }} className="px-4 py-2 rounded-xl text-sm text-text-secondary hover:bg-surface-2 transition-all duration-200">
+                取消
+              </button>
+              {localPath.trim() && (
+                <button onClick={handleMountLocal} disabled={isMounting} className="px-4 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-primary to-accent text-white hover:shadow-lg hover:shadow-primary/30 disabled:opacity-50 transition-all duration-200">
+                  {isMounting ? '挂载中...' : '挂载'}
+                </button>
               )}
             </div>
-            <button
-              onClick={() => setTermInput('')}
-              className="text-xs text-text-tertiary hover:text-text-secondary transition-colors"
-            >
-              清空
-            </button>
-          </div>
-
-          <div className="bg-background p-4 min-h-[300px] max-h-[500px] overflow-y-auto font-mono text-xs">
-            {executions.filter(e => e.language === 'terminal').length === 0 && termHistory.length === 0 ? (
-              <div className="text-text-muted py-8 text-center font-sans">
-                在下方输入命令并按 Enter 执行
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {executions
-                  .filter(e => e.language === 'terminal')
-                  .map((exec, idx) => (
-                    <div key={exec.id || idx}>
-                      <div className="text-primary">
-                        <span className="text-text-muted">$ </span>
-                        <span>{exec.code.replace(/^\$ /, '')}</span>
-                      </div>
-                      {exec.stdout && (
-                        <pre className="text-text-secondary whitespace-pre-wrap mt-1 pl-4 border-l-2 border-border-tertiary">
-                          {exec.stdout}
-                        </pre>
-                      )}
-                      {exec.stderr && (
-                        <pre className="text-danger/80 whitespace-pre-wrap mt-1 pl-4 border-l-2 border-danger/30">
-                          {exec.stderr}
-                        </pre>
-                      )}
-                      <div className="text-text-muted text-xs mt-1">
-                        {exec.duration_ms}ms
-                        {!exec.success && <span className="text-danger ml-2">exit {exec.exit_code}</span>}
-                      </div>
-                    </div>
-                  ))}
-                {isTermRunning && (
-                  <div className="text-primary animate-pulse">
-                    <span className="text-text-muted">$ </span>
-                    {termInput} (执行中...)
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          <div className="px-4 py-3 bg-surface-2 border-t border-border-tertiary">
-            <div className="flex items-center gap-2 bg-background rounded-lg px-3 py-2 border border-border-tertiary focus-within:border-primary">
-              <span className="text-primary font-mono text-sm">$</span>
-              <input
-                value={termInput}
-                onChange={(e) => setTermInput(e.target.value)}
-                onKeyDown={handleTermKeyDown}
-                placeholder="输入命令..."
-                disabled={isTermRunning}
-                className="flex-1 bg-transparent font-mono text-sm text-text-primary outline-none disabled:opacity-50"
-                autoFocus
-              />
-            </div>
           </div>
         </div>
       )}
 
-      {/* 权限编辑弹窗 */}
       {showPermEditor && (
-        <PermissionEditor
-          permission={editingPerm}
-          isCopyFromBuiltin={editingPermIsCopy}
-          onSave={editingPerm ? handleEditPermission : handleCreatePermission}
-          onCancel={() => { setShowPermEditor(false); setEditingPerm(null); setEditingPermIsCopy(false) }}
-        />
-      )}
-
-      {/* 文件夹选择器 */}
-      {showFolderPicker && (
-        <FolderPicker
-          onSelect={handleFolderPick}
-          onCancel={() => setShowFolderPicker(false)}
-        />
+        <PermissionEditor permission={editingPerm} isCopyFromBuiltin={editingPermIsCopy} onSave={editingPerm ? handleEditPermission : handleCreatePermission} onCancel={() => { setShowPermEditor(false); setEditingPerm(null) }} />
       )}
     </div>
   )
